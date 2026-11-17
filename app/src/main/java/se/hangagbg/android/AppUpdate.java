@@ -30,7 +30,7 @@ import java.util.concurrent.Executors;
 final class AppUpdate {
     private static final String API = "https://api.github.com/repos/tdavor/HangaGBG/releases/latest";
     private static final String DOWNLOAD = "https://github.com/tdavor/HangaGBG/releases/download/";
-    private static final String APK = "Hanga-Gbg-Firebase.apk";
+    private static final String APK = "HangaGBG.apk";
 
     private final Activity activity;
     private final DownloadManager downloads;

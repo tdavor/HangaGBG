@@ -13,7 +13,7 @@ key_dir="$(pwd)/app/build/manual"
 manifest=app/src/main/AndroidManifest.xml
 assets=app/src/main/assets
 package_id=se.hangagbg.android
-apk_name=Hanga-Gbg-Firebase.apk
+apk_name=HangaGBG.apk
 if [[ "$variant" == demo ]]; then
   manifest="$out/AndroidManifest.xml"
   assets="$out/offline-assets"
@@ -41,7 +41,7 @@ PYTHON
 fi
 "$tools/aapt2" compile --dir app/src/main/res -o "$out/resources.zip"
 "$tools/aapt2" link -I "$platform" --manifest "$manifest" \
-  --rename-manifest-package "$package_id" --version-code 8 --version-name 1.3.2 \
+  --rename-manifest-package "$package_id" --version-code 9 --version-name 1.3.3 \
   --min-sdk-version 26 --target-sdk-version 35 -A "$assets" \
   -o "$out/package.apk" "$out/resources.zip"
 java -m jdk.compiler/com.sun.tools.javac.Main -source 17 -target 17 -classpath "$platform" \
