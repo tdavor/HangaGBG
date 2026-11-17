@@ -13,3 +13,6 @@ main{padding-bottom:9rem}
 .discover-filters summary{min-height:44px}
 .event-pages{display:flex;align-items:center;justify-content:space-between;gap:.4rem;margin-block:1rem}
 .event-pages button:disabled{cursor:default}
+.password-field{display:flex;align-items:center;gap:.4rem}
+.password-field input{min-width:0}
+.password-field button{flex:none}

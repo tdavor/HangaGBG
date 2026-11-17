@@ -1,12 +1,13 @@
 import {Store,googleToken} from "./firestore.mjs";
 import {action,reads} from "./actions.mjs";
+import {sendWelcome} from "./welcome.mjs";
 
 const headers = {"Content-Type":"application/json","Cache-Control":"no-store",
   "Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"POST, OPTIONS",
   "Access-Control-Allow-Headers":"Authorization, Content-Type"};
 const reply = (body,status=200) => new Response(JSON.stringify(body),{status,headers});
 const errors = new Set(["invalid","loginRequired","blocked","forbidden","missing","past","full","reauth","adult",
-  "closed","quickTime","seatAvailable","cancelled","messageBlocked","reported","confirmEmail","schemaMissing"]);
+  "closed","quickTime","seatAvailable","cancelled","messageBlocked","reported","confirmEmail","schemaMissing","authDeletion"]);
 
 async function identity(request,env) {
   const authorization=request.headers.get("Authorization");
@@ -32,16 +33,30 @@ async function identity(request,env) {
     authTime:claims.auth_time,provider:claims.firebase?.sign_in_provider};
 }
 
-async function deleteAuth(env,token,uid) {
-  const response=await fetch(`https://identitytoolkit.googleapis.com/v1/projects/${env.FIREBASE_PROJECT}/accounts:delete`,{
-    method:"POST",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},
-    body:JSON.stringify({localId:uid})
-  });
+async function deleteAuth(env,token,uid,idToken) {
+  const url=idToken ? "https://identitytoolkit.googleapis.com/v1/accounts:delete?key="+encodeURIComponent(env.FIREBASE_API_KEY)
+    : `https://identitytoolkit.googleapis.com/v1/projects/${env.FIREBASE_PROJECT}/accounts:delete`;
+  const headers={"Content-Type":"application/json"};
+  if (!idToken) headers.Authorization="Bearer "+token;
+  const response=await fetch(url,{method:"POST",headers,
+    body:JSON.stringify(idToken?{idToken}:{localId:uid})});
   if (!response.ok && (await response.json()).error?.message!=="USER_NOT_FOUND") throw new Error("authDeletion");
 }
 
+async function removeEventRelations(db,id) {
+  for (const collection of ["plans","messages"]) {
+    while (true) {
+      const rows=await db.query(collection,[["event_id","EQUAL",id]],null,200);
+      if (!rows.length) break;
+      db.writes.clear();
+      for (const row of rows) db.remove(collection,collection==="plans"?id+"-"+row.user_id:row.id);
+      await db.send(":commit",{writes:[...db.writes.values()]});
+    }
+  }
+}
+
 export default {
-  async fetch(request,env) {
+  async fetch(request,env,ctx) {
     if (request.method==="OPTIONS") return new Response(null,{status:204,headers});
     const path=new URL(request.url).pathname;
     if (request.method!=="POST" || !["/rpc","/alerts"].includes(path)) return reply({error:"missing"},404);
@@ -65,12 +80,23 @@ export default {
       }
       const result=await db.run(store=>action(store,name,p,caller,env),!reads.has(name));
       if (result.deleteAuth) {
-        await deleteAuth(env,token,result.deleteAuth);
+        await deleteAuth(env,token,result.deleteAuth,
+          name==="delete_account"?request.headers.get("Authorization").slice(7):undefined);
         db.writes.clear();
         db.remove("identities",result.deleteAuth);
         db.remove("profiles",result.profileId);
         await db.send(":commit",{writes:[...db.writes.values()]});
         return reply({});
+      }
+      if (result.removedEvent) {
+        ctx.waitUntil(removeEventRelations(db,result.removedEvent).catch(error=>
+          console.error("Event cleanup failed:",error.message)));
+        return reply({});
+      }
+      if (name==="onboard" && result.newRegistration) {
+        const {newRegistration,...profile}=result;
+        ctx.waitUntil(sendWelcome(env,caller).catch(error=>console.error("Welcome email failed:",error.message)));
+        return reply(profile);
       }
       return reply(result);
     } catch(error) {

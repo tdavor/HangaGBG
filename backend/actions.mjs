@@ -35,7 +35,7 @@ function eventData(p, old) {
   const category = p.category;
   const mood = text(p.mood,12);
   const source = text(p.source,750);
-  if (!["fika","food","music","games","sport","nature","culture","nightlife","other"].includes(category)
+  if (!["fika","food","music","games","sport","walk","nature","culture","nightlife","other"].includes(category)
       || !["","chill","social","active"].includes(mood) || (source && !/^https:\/\/\S+$/.test(source))) fail("invalid");
   return {title:text(p.title,120,1), description:text(p.description,3000),category,mood,
     area:text(p.area,100,1),place:text(p.place,180,1),start:new Date(start).toISOString(),
@@ -121,7 +121,7 @@ export async function action(db, name, p, identity, env) {
     const after = integer(p.after_id,0);
     const alerts = await db.query("notices",[byRecipient(user.id),["id","GREATER_THAN",after]],ascending,50);
     const events=await db.getMany("events",alerts.map(row=>row.event_id));
-    return alerts.map(({id,kind,event_id,title})=>({id,kind:events.has(String(event_id))?kind:"removed",event_id,title}));
+    return alerts.map(({id,kind,event_id,title})=>({id,kind:(kind==="cancelled" || events.has(String(event_id)))?kind:"removed",event_id,title}));
   }
   const link = identity && await db.get("identities",identity.uid);
   const me = link && await db.get("profiles",link.id);
@@ -137,7 +137,7 @@ export async function action(db, name, p, identity, env) {
     const profile = {...data,id,uid:identity.uid,email:identity.email,admin:identity.uid===env.ADMIN_UID,blocked:false};
     db.put("identities",identity.uid,{id});
     db.put("profiles",id,profile);
-    return publicProfile(profile);
+    return {...publicProfile(profile),newRegistration:true};
   }
   if (me?.deleted && me.uid===identity.uid && name==="delete_account" &&
       identity.provider==="password" && Date.now()/1000-identity.authTime<=120) {
@@ -157,7 +157,7 @@ export async function action(db, name, p, identity, env) {
   if (name==="notices") {
     const rows=await readNotices(db,uid);
     const events=await db.getMany("events",rows.map(row=>row.event_id));
-    return rows.filter(row=>events.has(String(row.event_id))).map(({recipients,...row})=>row);
+    return rows.filter(row=>row.kind==="cancelled" || events.has(String(row.event_id))).map(({recipients,...row})=>row);
   }
   if (name==="alerts_on") {
     const cursor = (await db.query("notices",[byRecipient(uid)],descending,1))[0]?.id||0;
@@ -191,7 +191,7 @@ export async function action(db, name, p, identity, env) {
     if (name!=="delete_account" && !me.admin) fail("forbidden");
     if (name==="delete_account" && (identity.provider!=="password" || Date.now()/1000-identity.authTime>120)) fail("reauth");
     const target = name==="delete_account" ? me : await db.get("profiles",integer(p.id));
-    if (!target || target.admin || target.uid===env.ADMIN_UID) fail("forbidden");
+    if (!target || (name!=="delete_account" && (target.id===uid || target.uid===env.ADMIN_UID))) fail("forbidden");
     if (target.deleted) {
       if (name==="admin_delete" && target.uid) return {deleteAuth:target.uid,profileId:target.id};
       fail("forbidden");
@@ -294,7 +294,9 @@ async function eventAction(db,name,p,me) {
   const count=e.count||0;
   if (!visible && !manager) fail("missing");
   if (["edit","participants","cancel","delete_event","moderate"].includes(name)) {
-    if (!manager || (name==="moderate" && !me.admin)) fail("forbidden");
+    const participant = name==="participants" && visible && !e.cancelled &&
+      (await db.get("plans",planKey(id,uid)))?.joined;
+    if ((!manager && !participant) || (name==="moderate" && !me.admin)) fail("forbidden");
     if (name==="moderate") {
       db.put("events",id,{...e,hidden:p.hidden===true});
       return {};
@@ -303,7 +305,7 @@ async function eventAction(db,name,p,me) {
     const joined=plans.filter(plan=>plan.joined);
     const waiting=plans.filter(plan=>plan.waitlisted);
     if (name==="participants") {
-      const users=await db.getMany("profiles",joined.map(plan=>plan.user_id));
+      const users=await db.getMany("profiles",[e.owner,...joined.map(plan=>plan.user_id)]);
       return [...users.values()].filter(p=>!p.blocked&&!p.deleted).map(({id,name})=>({id,name}))
         .sort((a,b)=>a.name.localeCompare(b.name));
     }
@@ -323,8 +325,15 @@ async function eventAction(db,name,p,me) {
       await notices(db,updated,alerts);
       return {id};
     }
-    if (name==="delete_event" && !e.cancelled && !joined.length && !waiting.length) db.remove("events",id);
-    else if (!e.cancelled) {
+    if (name==="delete_event") {
+      db.remove("events",id);
+      if (!e.cancelled && upcoming) {
+        await notices(db,e,[...joined,...waiting].filter(plan=>plan.user_id!==uid)
+          .map(plan=>[plan.user_id,"cancelled"]));
+      }
+      return {removedEvent:id};
+    }
+    if (!e.cancelled) {
       db.put("events",id,{...e,cancelled:true});
       await notices(db,e,[...joined.filter(plan=>plan.user_id!==uid),...waiting].map(plan=>[plan.user_id,"cancelled"]));
     }
@@ -369,10 +378,10 @@ async function eventAction(db,name,p,me) {
     db.getMany("blocks",[planKey(uid,recipient),planKey(recipient,uid)])]);
   if (!person || person.blocked || person.deleted) fail("missing");
   if (blocks.size) fail("messageBlocked");
-  if (e.owner===uid) {
-    const plan=await db.get("plans",planKey(id,recipient));
-    if (!plan?.joined && !(await db.query("messages",[eq("event_id",id),eq("sender",recipient),eq("recipient",uid)],null,1)).length) fail("forbidden");
-  } else if (recipient!==e.owner || !visible) fail("forbidden");
+  const plans=await db.getMany("plans",[planKey(id,uid),planKey(id,recipient)]);
+  const senderJoined=uid===e.owner || plans.get(planKey(id,uid))?.joined;
+  const recipientJoined=recipient===e.owner || plans.get(planKey(id,recipient))?.joined;
+  if (!visible || !senderJoined || !recipientJoined) fail("forbidden");
   const body=text(p.body,1500,1);
   const msg=await nextIds(db,2);
   db.put("messages",msg,{id:msg,event_id:id,sender:uid,recipient,body,created:now()});
