@@ -84,6 +84,11 @@ const copy = {
   schemaMissing:["Kontrollera Firebase- och API-konfigurationen.","Check the Firebase and API configuration."],
   confirmEmail:["Öppna verifieringslänken i din e-post och logga sedan in igen.","Open the verification link in your email, then sign in again."],
   code:["Kod från din e-post","Code from your email"], verify:["Bekräfta konto","Verify account"],
+  forgotPassword:["Glömt lösenord?","Forgot password?"],
+  resetPassword:["Återställ lösenord","Reset password"],
+  resetHelp:["Ange e-postadressen som du använder för Hänga Gbg.","Enter the email address you use for Hänga Gbg."],
+  resetSend:["Skicka återställningslänk","Send reset link"],
+  resetSent:["Om det finns ett konto för adressen får du en återställningslänk. Kontrollera även skräpposten. Logga in här när du har valt ett nytt lösenord.","If an account exists for that address, you’ll receive a reset link. Check your spam folder too. Sign in here after choosing a new password."],
   resend:["Skicka ny länk","Resend link"], codeSent:["Kontrollera din e-post.","Check your email."],
   badCode:["Koden är ogiltig eller har löpt ut.","The code is invalid or expired."],
   blocked:["Kontot är blockerat.","This account is blocked."],
@@ -125,7 +130,9 @@ let token = demo ? localStorage.hangaDemoToken || "" : hangaCloud.signedIn ? "fi
 let pendingEmail = "";
 let blockedPeople=[];
 let user = null, events = [], messageList = [], noticeList = [], admin = null;
-let filters = { query:"", area:"", category:"", period:"upcoming" };
+const defaultFilters = { query:"", area:"", category:"", period:"upcoming" };
+let filters = {...defaultFilters};
+let renderedResults;
 const PAGE_SIZE = 5;
 const browseOrder = new Map();
 let eventPageIndex = 0;
@@ -339,6 +346,10 @@ async function load() {
       if (version!==refreshId) return;
       events=current;
       syncReminders();
+      if (page==="discover" && $("results")) {
+        refreshResults();
+        return;
+      }
     }
     if (page==="messages" && user) messageList=await api("/messages");
     if (page==="profile" && user) blockedPeople=await api("/blocks");
@@ -402,6 +413,13 @@ function authPage(mode) {
   if (user) return `<h1>${t("profile")}</h1>${link("profile","#profile","primary")}`;
   if (demo) return `<h1>${t("login")}</h1><p>${t("demoBanner")}</p>${action(t("demo"),"data-demo","primary")}`;
   if (!base) return `<h1>${t("login")}</h1><p>${t("setup")}</p>${link("connect","#settings","primary")}`;
+  if (mode==="reset") return `<h1>${t("resetPassword")}</h1><p>${t("resetHelp")}</p>
+    <form data-form="reset">
+      ${field("email","email",pendingEmail,"email",'required autocomplete="email"')}
+      <button class="primary" type="submit">${t("resetSend")}</button>
+    </form><div class="actions">${link("login","#auth")}</div>`;
+  if (mode==="reset-sent") return `<h1>${t("resetPassword")}</h1><p>${t("resetSent")}</p>
+    <div class="actions">${link("login","#auth","primary")}</div>`;
   if (mode==="confirm") return `<h1>${t("verify")}</h1><p>${t("confirmEmail")}</p>
     <div class="actions">${action(t("resend"),"data-resend")} ${link("login","#auth","primary")}</div>`;
   return `<h1>${t(register?"register":"login")}</h1><form data-form="${register?"register":"login"}">
@@ -410,11 +428,11 @@ function authPage(mode) {
     ${passwordField("passwordLabel","password",{policy:register,required:true,autocomplete:register?"new-password":"current-password"})}
     ${register?`<label class="check"><input name="adult" type="checkbox" required> ${t("adultLabel")}</label>`:""}
     <button class="primary">${t(register?"register":"login")}</button></form>
-    <div class="actions">${link("preferences","#settings")} ${link(register?"login":"register",register?"#auth":"#auth/register")}
+    <div class="actions">${register?"":action(t("forgotPassword"),"data-forgot-password")} ${link("preferences","#settings")} ${link(register?"login":"register",register?"#auth":"#auth/register")}
     </div>`;
 }
 function discoverPage() {
-  return `<section class="hero"><h1>${t("browse")}</h1><p>${t("intro")}</p><div class="actions">${link("quick","#create/quick","primary")}${link("create","#create")}</div></section>
+  return `<section class="hero"><h1>${t("browse")}</h1><p>${t("intro")}</p><div class="actions">${link("quick","#create/quick","primary")}${link("create","#create")} ${action(t("browseEvents"),"data-browse-events")}</div></section>
     ${demo?`<p class="muted">${t("demoBanner")}</p>`:!base?`<p>${t("setup")}</p>${link("connect","#settings")}`:""} ${link("preferences","#settings")}
     <details class="discover-filters" ${hasFilters()?"open":""}><summary>${t("searchFilters")}</summary>
     <form id="filter" class="grid">
@@ -425,7 +443,18 @@ function discoverPage() {
       <label class="check wide"><input type="checkbox" name="newcomers" ${filters.newcomers?"checked":""}> ${t("newcomers")}</label>
     </form></details>
     <h2 id="browse-heading" tabindex="-1">${t("browseEvents")}</h2>
-    <section id="results" aria-live="polite">${results()}</section>`;
+    <section id="results" aria-live="polite">${renderedResults=results()}</section>`;
+}
+function refreshResults() {
+  const markup=results();
+  if (markup===renderedResults) return;
+  $("results").innerHTML=markup;
+  renderedResults=markup;
+}
+function focusEventList() {
+  const heading=$("browse-heading");
+  heading.focus({preventScroll:true});
+  heading.scrollIntoView({block:"start"});
 }
 function hasFilters() {
   return Boolean(filters.query.trim() || filters.area || filters.category ||
@@ -620,7 +649,7 @@ document.addEventListener("input",event=>{
   if (event.target.form?.id==="filter") {
     filters=Object.fromEntries(new FormData(event.target.form));
     eventPageIndex=0;
-    $("results").innerHTML=results();
+    refreshResults();
   }
   if (event.target.name==="area" && $("customArea") && event.target.form?.id!=="filter") {
     const custom=event.target.value==="other";
@@ -659,6 +688,11 @@ document.addEventListener("submit",async event=>{
       session(response);
       pendingEmail="";
       location.hash="profile";
+    } else if (mode==="reset") {
+      pendingEmail=data.email.trim().toLowerCase();
+      await api("/password/reset",{email:pendingEmail,locale:lang});
+      if (form.isConnected) location.hash="auth/reset-sent";
+      return;
     } else if (mode==="report") {
       const {type,id}=form.dataset;
       await api("/report",{[{event:"id",person:"person",message:"message"}[type]]:Number(id),reason:data.reason});
@@ -715,6 +749,12 @@ document.addEventListener("submit",async event=>{
   finally { button.disabled=false; }
 });
 document.addEventListener("click",async event=>{
+  if (event.target.closest('#nav a[href="#discover"]') && route()[0]==="discover") {
+    event.preventDefault();
+    window.scrollTo(0,0);
+    void load();
+    return;
+  }
   const button=event.target.closest("button[type=button]");
   if (!button) return;
   const d=button.dataset;
@@ -726,12 +766,30 @@ document.addEventListener("click",async event=>{
     button.setAttribute("aria-label",t(show?"passwordHide":"passwordShow"));
     return;
   }
+  if ("forgotPassword" in d) {
+    pendingEmail=document.querySelector('[data-form="login"] [name="email"]').value.trim();
+    location.hash="auth/reset";
+    return;
+  }
+  if ("browseEvents" in d) {
+    filters={...defaultFilters};
+    const filterForm=$("filter");
+    filterForm.elements.query.value=filters.query;
+    filterForm.elements.area.value=filters.area;
+    filterForm.elements.category.value=filters.category;
+    filterForm.elements.period.value=filters.period;
+    filterForm.elements.newcomers.checked=false;
+    filterForm.closest("details").open=false;
+    eventPageIndex=0;
+    refreshResults();
+    focusEventList();
+    void load();
+    return;
+  }
   if (d.eventPage) {
     eventPageIndex+=Number(d.eventPage);
-    $("results").innerHTML=results();
-    const heading=$("browse-heading");
-    heading.focus({preventScroll:true});
-    heading.scrollIntoView({block:"start"});
+    refreshResults();
+    focusEventList();
     return;
   }
   if ("lang" in d) {
@@ -807,8 +865,8 @@ document.addEventListener("change",event=>{
   render();
 });
 setInterval(()=>{
-  if (route()[0]==="discover" && $("results")) $("results").innerHTML=results();
+  if (route()[0]==="discover" && $("results")) refreshResults();
 },30000);
-window.addEventListener("hashchange",()=>{ window.scrollTo(0,0); load(); });
+window.addEventListener("hashchange",()=>{ window.scrollTo(0,0); render(); load(); });
 render();
 load();

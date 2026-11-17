@@ -41,7 +41,7 @@ PYTHON
 fi
 "$tools/aapt2" compile --dir app/src/main/res -o "$out/resources.zip"
 "$tools/aapt2" link -I "$platform" --manifest "$manifest" \
-  --rename-manifest-package "$package_id" --version-code 9 --version-name 1.3.3 \
+  --rename-manifest-package "$package_id" --version-code 10 --version-name 1.3.4 \
   --min-sdk-version 26 --target-sdk-version 35 -A "$assets" \
   -o "$out/package.apk" "$out/resources.zip"
 java -m jdk.compiler/com.sun.tools.javac.Main -source 17 -target 17 -classpath "$platform" \
