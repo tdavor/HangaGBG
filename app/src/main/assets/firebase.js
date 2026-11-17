@@ -53,11 +53,13 @@ const hangaCloud = (() => {
     try { result=JSON.parse(raw); } catch { throw new Error("server"); }
     if (response.ok) return result;
     const code = typeof result.error==="string" ? result.error : result.error?.message?.split(" : ")[0];
-    throw new Error(errors.has(code)?code:messages[code] || (response.status===429?"mailRate":"server"));
+    const error = new Error(errors.has(code)?code:messages[code] || (response.status===429?"mailRate":"server"));
+    error.providerCode=code;
+    throw error;
   }
 
-  function auth(action, body) {
-    return call("https://identitytoolkit.googleapis.com/v1/accounts:"+action+"?key="+encodeURIComponent(config.key),body,undefined,action==="sendOobCode"?"sv":undefined);
+  function auth(action, body, locale=action==="sendOobCode"?"sv":undefined) {
+    return call("https://identitytoolkit.googleapis.com/v1/accounts:"+action+"?key="+encodeURIComponent(config.key),body,undefined,locale);
   }
   function rpc(action, payload={}, access) {
     return call(config.url+"/rpc",{action,payload},access);
@@ -119,6 +121,14 @@ const hangaCloud = (() => {
         save(result,false);
         return {confirmation:email};
       }
+    }
+    if (path==="/password/reset") {
+      try {
+        await auth("sendOobCode",{requestType:"PASSWORD_RESET",email:data.email.trim().toLowerCase()},data.locale==="en"?"en":"sv");
+      } catch (error) {
+        if (error.providerCode!=="EMAIL_NOT_FOUND") throw error;
+      }
+      return {};
     }
     if (path==="/resend") {
       const access=await accessToken();
