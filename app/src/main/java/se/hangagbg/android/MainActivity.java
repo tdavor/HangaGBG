@@ -17,6 +17,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebChromeClient;
 import java.io.IOException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -57,6 +58,7 @@ public final class MainActivity extends Activity {
         settings.setAllowContentAccess(false);
         settings.setSupportMultipleWindows(false);
         web.addJavascriptInterface(new AppActions(), "HangaAndroid");
+        web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 openEvent(getIntent());
@@ -64,7 +66,8 @@ public final class MainActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 if ("https".equals(uri.getScheme()) && HOST.equals(uri.getHost())) return false;
-                if (request.isForMainFrame() && request.hasGesture() && "https".equals(uri.getScheme())) {
+                if (request.isForMainFrame() && request.hasGesture() && ("https".equals(uri.getScheme())
+                    || "mailto:t.davor@gmail.com".equals(uri.toString()))) {
                     openExternalLink(uri);
                 }
                 return true;
@@ -105,7 +108,7 @@ public final class MainActivity extends Activity {
     }
 
     private void openExternalLink(Uri uri) {
-        Intent view = new Intent(Intent.ACTION_VIEW, uri);
+        Intent view = new Intent("mailto".equals(uri.getScheme()) ? Intent.ACTION_SENDTO : Intent.ACTION_VIEW, uri);
         if ("www.google.com".equals(uri.getHost()) && "/maps/search/".equals(uri.getPath())) {
             try {
                 startActivity(new Intent(view).setPackage("com.google.android.apps.maps"));
@@ -214,7 +217,13 @@ public final class MainActivity extends Activity {
                     JobInfo job = new JobInfo.Builder(AlertsJob.JOB_ID,new ComponentName(MainActivity.this,AlertsJob.class))
                         .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                         .setPeriodic(JobInfo.getMinPeriodMillis()).setPersisted(true).build();
-                    getSystemService(JobScheduler.class).schedule(job);
+                    try {
+                        if (getSystemService(JobScheduler.class).schedule(job)==JobScheduler.RESULT_SUCCESS) return;
+                    } catch (IllegalArgumentException | SecurityException error) {
+                        android.util.Log.w("HangaGBG","Could not schedule notifications",error);
+                    }
+                    getSharedPreferences(AlertsJob.STORAGE,MODE_PRIVATE).edit().clear().apply();
+                    web.evaluateJavascript("window.hangaAlertFailed?.()",null);
                 };
                 if (android.os.Build.VERSION.SDK_INT >= 33 &&
                     checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {

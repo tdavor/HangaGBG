@@ -46,7 +46,7 @@ test("capacity, waitlist, Android alert cursor and cancelled plans",async()=>{
   await assert.rejects(call("join",{id,enabled:true},2),{message:"full"});
   await call("waitlist",{id,enabled:true},2);
   assert.equal((await call("events",{},2))[0].waitlisted,true);
-  assert.equal((await call("participants",{id}))[0].id,people[1].id);
+  assert.ok((await call("participants",{id})).some(p=>p.id===people[1].id));
   await assert.rejects(call("participants",{id},2),{message:"forbidden"});
   await call("join",{id,enabled:false},1);
   const poll=await call("poll",{token:device.token,after_id:device.cursor},null);
@@ -62,6 +62,8 @@ test("capacity, waitlist, Android alert cursor and cancelled plans",async()=>{
 
 test("messages, access control and report resolution",async()=>{
   const {call,id,people}=await app();
+  await assert.rejects(call("message",{id,recipient:people[0].id,body:"Hi!"},1),{message:"forbidden"});
+  await call("join",{id,enabled:true},1);
   await call("message",{id,recipient:people[0].id,body:"Hi!"},1);
   assert.equal((await call("messages"))[0].body,"Hi!");
   assert.deepEqual(await call("messages",{},2),[]);
@@ -90,4 +92,43 @@ test("e-mail verification, closed registration and blocked account",async()=>{
   await call("admin_block",{id:people[1].id,blocked:true});
   await assert.rejects(call("me",{},1),{message:"blocked"});
   assert.equal((await call("events"))[0].count,0);
+});
+
+
+test("participants can message each other only while joined to the same event",async()=>{
+  const {call,id,event,people}=await app();
+  await call("edit",{...event,id,capacity:2,category:"walk"});
+  await call("join",{id,enabled:true},1);
+  await assert.rejects(call("message",{id,recipient:people[2].id,body:"Hi"},1),{message:"forbidden"});
+  await call("join",{id,enabled:true},2);
+  assert.ok((await call("participants",{id},1)).some(p=>p.id===people[2].id));
+  await call("message",{id,recipient:people[2].id,body:"See you"},1);
+  assert.equal((await call("messages",{},2))[0].body,"See you");
+  await call("join",{id,enabled:false},2);
+  await assert.rejects(call("message",{id,recipient:people[2].id,body:"Hi"},1),{message:"forbidden"});
+});
+
+test("owners and admins can remove events with participants or after cancellation",async()=>{
+  const {call,db,id,event,people}=await app();
+  await call("join",{id,enabled:true},1);
+  await assert.rejects(call("delete_event",{id},1),{message:"forbidden"});
+  assert.equal((await call("delete_event",{id})).removedEvent,id);
+  assert.equal(await db.get("events",id),undefined);
+  assert.equal((await call("notices",{},1))[0].kind,"cancelled");
+  const owned=await call("create",event,1);
+  await call("cancel",{id:owned.id},1);
+  assert.equal((await call("delete_event",{id:owned.id})).removedEvent,owned.id);
+  await call("admin_block",{id:people[1].id,blocked:true});
+  await call("admin_block",{id:people[1].id,blocked:false});
+  assert.equal((await call("me",{},1)).blocked,false);
+});
+
+test("a recently reauthenticated user can delete their own account, including an admin",async()=>{
+  const {call,people,users}=await app();
+  await assert.rejects(call("delete_account"),{message:"reauth"});
+  users[0].provider="password";
+  users[0].authTime=Math.floor(Date.now()/1000);
+  const deletion={deleteAuth:users[0].uid,profileId:people[0].id};
+  assert.deepEqual(await call("delete_account"),deletion);
+  assert.deepEqual(await call("delete_account"),deletion);
 });

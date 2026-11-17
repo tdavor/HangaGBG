@@ -1,11 +1,11 @@
-# Hänga Gbg 1.3.0 · Android i Firebase
+# Hänga Gbg 1.3.1 · Android i Firebase
 
 Glavni APK koristi Firebase Authentication i Cloud Firestore. API na Cloudflare Workers provjerava kapacitet događaja, prava organizatora i administratora te pristup privatnim porukama. Firebase Spark i Workers Free mogu se koristiti unutar njihovih besplatnih kvota. Demo je zaseban APK i radi lokalno. Oba APK-a zahtijevaju Android 8.0 ili noviji.
 
 ## Firebase projekt
 
 1. U [Firebase konzoli](https://console.firebase.google.com/) napravi zaseban projekt **Hänga Gbg** i odaberi **Spark**. Analytics je opcionalan.
-2. Uključi **Authentication → Sign-in method → Email/Password**. Postavi politiku lozinke na najmanje 10 znakova, u načinu **Require**. Firebase šalje poveznice za potvrdu adrese i promjenu e-pošte. Korisnik nakon potvrde ponovno ulazi u aplikaciju s e-mailom i lozinkom.
+2. Uključi **Authentication → Sign-in method → Email/Password**. Postavi politiku lozinke na najmanje 8 znakova i uključi **Non-alphanumeric character** u načinu **Require**. Firebase šalje poveznice za potvrdu adrese i promjenu e-pošte. Korisnik nakon potvrde ponovno ulazi u aplikaciju s e-mailom i lozinkom.
 3. Uključi **Cloud Firestore** u načinu **Native** i odaberi europsku lokaciju. Koristi bazu `(default)` i pokreni je s pravilima za produkciju.
 4. U **Project settings** kopiraj **Project ID** i **Web API Key**. Ako web ključ još nije prikazan, registriraj web aplikaciju u projektu kako bi dobio konfiguraciju s poljem `apiKey`. Android WebView koristi Firebase REST API pa mu ne treba `google-services.json`.
 5. Iz korijena repozitorija objavi Firestore pravila i indekse. Pričekaj da svi indeksi u konzoli prijeđu u stanje **Enabled**.
@@ -73,3 +73,16 @@ node migration/import-firebase.mjs /sigurna/putanja/hanga-backup.json TVOJ_PROJE
 Za stvarni uvoz postavi Google Application Default Credentials s pravima upravljanja Firebase Authenticationom i upisa u Firestore. Možeš koristiti odvojeni servisni račun s ulogama **Firebase Authentication Admin** i **Cloud Datastore User**. Za uvoz koristi isti provjereni backup i zamijeni `--check` s `--apply`. Ako se uvoz prekine, ponovi istu naredbu s istom datotekom prije puštanja aplikacije u upotrebu. Provjeri prijavu postojećeg računa, broj događaja, prijave i poruke prije nego obustaviš stari projekt.
 
 Službena dokumentacija za [Firebase planove](https://firebase.google.com/docs/projects/billing/firebase-pricing-plans), [Cloudflare Workers kvote](https://developers.cloudflare.com/workers/platform/limits/) i [Firebase uvoz BCRYPT korisnika](https://firebase.google.com/docs/auth/admin/import-users).
+
+
+## Välkomstmejl / E-mail dobrodošlice
+
+Firebase i dalje šalje svoju poveznicu za potvrdu adrese. Worker može poslati zaseban švedski e-mail dobrodošlice nakon uspješne registracije. Za slanje preko Resenda dodaj ove dvije tajne iz mape `backend` pa ponovno objavi Worker. `WELCOME_FROM` je adresa na tvojoj verificiranoj domeni u Resendu. Odgovori idu na `t.davor@gmail.com`.
+
+```sh
+npx wrangler secret put RESEND_API_KEY
+npx wrangler secret put WELCOME_FROM
+npx wrangler deploy
+```
+
+Bez tih postavki registracija i Firebase potvrda adrese i dalje rade. Za provjeru slanja registriraj novi račun nakon što postaviš tajne.

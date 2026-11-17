@@ -31,13 +31,14 @@ const hangaCloud = (() => {
     INVALID_LOGIN_CREDENTIALS:"badLogin",INVALID_PASSWORD:"badLogin",EMAIL_NOT_FOUND:"badLogin",
     USER_DISABLED:"blocked",EMAIL_EXISTS:"emailUsed",WEAK_PASSWORD:"password",TOO_MANY_ATTEMPTS_TRY_LATER:"mailRate",
     INVALID_REFRESH_TOKEN:"loginRequired",TOKEN_EXPIRED:"loginRequired",INVALID_ID_TOKEN:"loginRequired",
-    USER_NOT_FOUND:"loginRequired",CREDENTIAL_TOO_OLD_LOGIN_AGAIN:"reauth",OPERATION_NOT_ALLOWED:"schemaMissing"
+    PASSWORD_DOES_NOT_MEET_REQUIREMENTS:"password",USER_NOT_FOUND:"loginRequired",CREDENTIAL_TOO_OLD_LOGIN_AGAIN:"reauth",OPERATION_NOT_ALLOWED:"schemaMissing"
   };
   const errors = new Set(["invalid","loginRequired","blocked","forbidden","missing","past","full","reauth","adult",
-    "closed","quickTime","seatAvailable","cancelled","messageBlocked","reported","confirmEmail","schemaMissing","server"]);
+    "closed","quickTime","seatAvailable","cancelled","messageBlocked","reported","confirmEmail","schemaMissing","server","authDeletion"]);
 
-  async function call(url, body, access) {
+  async function call(url, body, access, locale) {
     const headers = {"Content-Type":body instanceof URLSearchParams?"application/x-www-form-urlencoded":"application/json"};
+    if (locale) headers["X-Firebase-Locale"]=locale;
     if (access) headers.Authorization = "Bearer "+access;
     const controller = new AbortController();
     const timeout = setTimeout(()=>controller.abort(),20000);
@@ -56,7 +57,7 @@ const hangaCloud = (() => {
   }
 
   function auth(action, body) {
-    return call("https://identitytoolkit.googleapis.com/v1/accounts:"+action+"?key="+encodeURIComponent(config.key),body);
+    return call("https://identitytoolkit.googleapis.com/v1/accounts:"+action+"?key="+encodeURIComponent(config.key),body,undefined,action==="sendOobCode"?"sv":undefined);
   }
   function rpc(action, payload={}, access) {
     return call(config.url+"/rpc",{action,payload},access);
@@ -149,8 +150,7 @@ const hangaCloud = (() => {
       return {...updated,emailPending:updated.email!==email};
     }
     if (path==="/account/delete") {
-      const profile=await rpc("me",{},access);
-      const verified=await signIn(profile.email,data.password);
+      const verified=await signIn(data.email,data.password);
       await rpc("delete_account",{},verified.idToken);
       forget();
       return {};
