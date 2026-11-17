@@ -215,9 +215,10 @@ public final class MainActivity extends Activity {
                 new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,text), null)));
         }
 
-        @JavascriptInterface public void startAlerts(String origin,String token,String cursor,String language) {
+        @JavascriptInterface public void startAlerts(String origin,String token,String cursor,String language,String owner,String area,String latest) {
             if (getPackageName().endsWith(".demo") || !origin.matches("https://(?:[a-z0-9-]+\\.){2}workers\\.dev")
-                || !token.matches("[a-f0-9-]{72}") || !cursor.matches("[0-9]{1,16}")) return;
+                || !token.matches("[a-f0-9-]{72}") || !cursor.matches("[0-9]{1,16}")
+                || !owner.matches("[0-9]{1,16}") || !latest.matches("[0-9]{1,16}") || area.length()>200) return;
             runOnUiThread(() -> {
                 Runnable setup = () -> {
                     if (!getSystemService(NotificationManager.class).areNotificationsEnabled()) {
@@ -226,7 +227,9 @@ public final class MainActivity extends Activity {
                     }
                     getSharedPreferences(AlertsJob.STORAGE,MODE_PRIVATE).edit()
                         .putString("origin",origin).putString("token",token)
-                        .putLong("cursor",Long.parseLong(cursor)).putString("language",language).apply();
+                        .putLong("cursor",Long.parseLong(cursor)).putString("language",language)
+                        .putLong("owner",Long.parseLong(owner)).putString("area",area)
+                        .putLong("seenEvent",Long.parseLong(latest)).apply();
                     JobInfo job = new JobInfo.Builder(AlertsJob.JOB_ID,new ComponentName(MainActivity.this,AlertsJob.class))
                         .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                         .setPeriodic(JobInfo.getMinPeriodMillis()).setPersisted(true).build();
@@ -245,6 +248,17 @@ public final class MainActivity extends Activity {
                 } else {
                     setup.run();
                 }
+            });
+        }
+
+        @JavascriptInterface public void syncAlertProfile(String token,String owner,String area,String language) {
+            if (getPackageName().endsWith(".demo") || !token.matches("[a-f0-9-]{72}")
+                || !owner.matches("[0-9]{1,16}") || area.length()>200) return;
+            runOnUiThread(() -> {
+                var preferences = getSharedPreferences(AlertsJob.STORAGE,MODE_PRIVATE);
+                if (!token.equals(preferences.getString("token",""))) return;
+                preferences.edit().putLong("owner",Long.parseLong(owner)).putString("area",area)
+                    .putString("language",language).apply();
             });
         }
 

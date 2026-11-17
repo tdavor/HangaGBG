@@ -37,7 +37,8 @@ const copy = {
   reports:["Anmälningar","Reports"], resolve:["Markera behandlad","Mark resolved"], resolved:["Behandlad","Resolved"],
   alertsOn:["Aktivera Android-aviseringar","Enable Android notifications"], alertsOff:["Stäng av Android-aviseringar","Disable Android notifications"],
   alertsDenied:["Tillåt aviseringar i Android-inställningarna.","Allow notifications in Android settings."],
-  alertsNote:["Android hämtar nya aviseringar i bakgrunden när systemet tillåter det.","Android checks for new notifications in the background when the system allows it."],
+  accountMenu:["Kontomeny","Account menu"],
+  localAlertsNote:["Nya träffar i ditt sparade område ingår när Android-aviseringar är aktiverade.","Android notifications include new meetups in your saved area."],
   discover:["Upptäck","Discover"], plans:["Mina planer","My plans"], create:["Skapa","Create"],
   messages:["Meddelanden","Messages"], profile:["Mitt konto","My account"], admin:["Adminpanel","Admin panel"],
   notices:["Aviseringar","Notifications"], login:["Logga in","Log in"], register:["Skapa konto","Sign up"],
@@ -212,6 +213,10 @@ window.hangaRefreshReminders=async ()=>{
     if (scope===reminderScope() && ["loginRequired","blocked"].includes(error.message)) session();
   }
 };
+function syncAlertProfile() {
+  if (!demo && user) window.HangaAndroid?.syncAlertProfile?.(
+    localStorage.hangaAlertToken||"",String(user.id),user.area||"",lang);
+}
 function session(result) {
   token=result?.token || "";
   user=result?.user || null;
@@ -220,6 +225,7 @@ function session(result) {
     else localStorage.removeItem("hangaDemoToken");
   } else if (!token) hangaCloud.forget();
   if (!user) syncReminders([]);
+  else syncAlertProfile();
 }
 async function disableAlerts() {
   if (demo || !window.HangaAndroid) return;
@@ -335,7 +341,7 @@ async function load() {
   const page=route()[0];
   try {
     if (token && !user) {
-      try { user=await api("/me"); }
+      try { user=await api("/me"); syncAlertProfile(); }
       catch(error) { if (["loginRequired","blocked"].includes(error.message)) {
         session();
         if (error.message==="blocked") status("blocked");
@@ -600,20 +606,29 @@ function plansPage() {
     <div class="card"><h2>${t("saved")}</h2>${plans.map(event=>card(event)).join("")||`<p>${t("noPlans")}</p>`}</div>`;
 }
 function profilePage() {
-  return `<h1>${t("profile")}</h1><div class="actions">${link("plans","#plans")}${link("notices","#notices")}${link("preferences","#settings")}${link("contact","mailto:t.davor@gmail.com")}${action(t("logout"),"data-logout")}
-    ${!demo&&window.HangaAndroid?`${action(t("alertsOn"),"data-alerts-on")}${action(t("alertsOff"),"data-alerts-off")}`:""}</div>
-    ${!demo&&window.HangaAndroid?`<p>${t("alertsNote")}</p>`:""}
-    ${blockedPeople.length?`<details><summary>${t("blockedPeople")}</summary>${blockedPeople.map(p=>
+  return `<div class="rows between account-heading"><h1>${t("profile")}</h1>
+    <details class="account-menu"><summary aria-label="${t("accountMenu")}"><span aria-hidden="true">☰</span></summary>
+      <div class="account-menu-panel">
+        ${link("plans","#plans")}${link("notices","#notices")}${link("preferences","#settings")}${link("contact","mailto:t.davor@gmail.com")}
+        ${action(t("passwordLabel"),'data-account-section="profile-password"')}
+        ${blockedPeople.length?action(t("blockedPeople"),'data-account-section="profile-blocked"'):""}
+        ${base?action(t("deleteAccount"),'data-account-section="profile-delete"',"danger"):""}
+        ${!demo&&window.HangaAndroid?`${action(t("alertsOn"),"data-alerts-on")}${action(t("alertsOff"),"data-alerts-off")}
+          <small class="muted">${t("localAlertsNote")}</small>`:""}
+        ${action(t("logout"),"data-logout")}
+      </div>
+    </details></div>
+    ${blockedPeople.length?`<details id="profile-blocked" hidden><summary>${t("blockedPeople")}</summary>${blockedPeople.map(p=>
       `<p>${esc(p.name)} ${action(t("unblockPerson"),`data-block-person="${Number(p.id)}" data-value="false"`)}</p>`).join("")}</details>`:""}
     <form data-form="profile">
       ${field("name","name",user.name,"text",'required maxlength="80"')}${field("email","email",user.email,"email","required")}
       ${areaSelect(user.area)}${textArea("bio","bio",user.bio,'maxlength="1500"')}
       ${field("interests","interests",user.interests,"text",'maxlength="300"')}
 
-      <details><summary>${t("passwordLabel")}</summary>${passwordField("current","current")}
+      <details id="profile-password" hidden><summary>${t("passwordLabel")}</summary>${passwordField("current","current")}
       ${passwordField("newPassword","newPassword",{policy:true,autocomplete:"new-password"})}</details>
       <button class="primary">${t("save")}</button></form>
-      ${base?`<details><summary class="danger">${t("deleteAccount")}</summary><form data-form="deleteAccount">
+      ${base?`<details id="profile-delete" hidden><summary class="danger">${t("deleteAccount")}</summary><form data-form="deleteAccount">
         ${passwordField("current","password",{required:true})}<button class="danger">${t("deleteAccount")}</button>
       </form></details>`:""}`;
 }
@@ -720,11 +735,13 @@ document.addEventListener("submit",async event=>{
       if (data.newPassword && !passwordValid(data.newPassword)) throw new Error("password");
       data.languages=user.languages||"";
       if (!demo && (data.email.toLowerCase()!==user.email || data.newPassword) && !data.current) {
-        form.querySelector("details").open=true;
+        $("profile-password").hidden=false;
+        $("profile-password").open=true;
         form.querySelector('[name="current"]').focus();
         throw new Error("badLogin");
       }
       user=await api("/me",data);
+      syncAlertProfile();
       if (user.emailPending) {
         render();
         return status("emailPending");
@@ -755,9 +772,19 @@ document.addEventListener("click",async event=>{
     void load();
     return;
   }
+  const menu=document.querySelector(".account-menu[open]");
+  if (menu && !menu.contains(event.target)) menu.open=false;
   const button=event.target.closest("button[type=button]");
   if (!button) return;
   const d=button.dataset;
+  if (d.accountSection) {
+    menu.open=false;
+    const section=$(d.accountSection);
+    section.hidden=false;
+    section.open=true;
+    section.querySelector("summary").focus();
+    return;
+  }
   if ("passwordToggle" in d) {
     const input=button.parentElement.querySelector("input");
     const show=input.type==="password";
@@ -794,6 +821,7 @@ document.addEventListener("click",async event=>{
   }
   if ("lang" in d) {
     localStorage.lang=lang=lang==="sv"?"en":"sv";
+    syncAlertProfile();
     window.hangaRefreshReminders();
     render();
     return;
@@ -816,10 +844,12 @@ document.addEventListener("click",async event=>{
       return;
     } else if ("alertsOn" in d) {
       await disableAlerts();
+      const currentEvents=await api("/events");
+      const latest=currentEvents.reduce((max,event)=>Math.max(max,Number(event.id)),0);
       const registration=await api("/alerts/on",{});
       localStorage.hangaAlertToken=registration.token;
       const {url}=hangaCloud.configuration;
-      window.HangaAndroid.startAlerts(url,registration.token,String(registration.cursor),lang);
+      window.HangaAndroid.startAlerts(url,registration.token,String(registration.cursor),lang,String(user.id),user.area||"",String(latest));
     } else if ("alertsOff" in d) {
       await disableAlerts();
     } else if (d.blockPerson) {
@@ -861,6 +891,7 @@ document.addEventListener("click",async event=>{
 document.addEventListener("change",event=>{
   if (event.target.name!=="appLanguage" || !["sv","en"].includes(event.target.value)) return;
   localStorage.lang=lang=event.target.value;
+  syncAlertProfile();
   window.hangaRefreshReminders();
   render();
 });

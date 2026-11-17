@@ -58,36 +58,13 @@ public final class AlertsJob extends JobService {
         if (token.isEmpty() || !origin.matches("https://(?:[a-z0-9-]+\\.){2}workers\\.dev")) return;
         long cursor = preferences.getLong("cursor", 0);
         JSONObject body = new JSONObject().put("token", token).put("after_id", cursor);
-        HttpsURLConnection connection = (HttpsURLConnection) new URL(origin + "/alerts").openConnection();
-        JSONArray results;
-        try {
-            connection.setInstanceFollowRedirects(false);
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(10000);
-            connection.setRequestMethod("POST");
-            connection.setRequestProperty("Content-Type", "application/json");
-            connection.setDoOutput(true);
-            try (var output = connection.getOutputStream()) {
-                output.write(body.toString().getBytes(StandardCharsets.UTF_8));
+        JSONArray results = post(origin + "/alerts", body);
+        if (results == null) {
+            if (token.equals(preferences.getString("token", ""))) {
+                preferences.edit().clear().apply();
+                getSystemService(android.app.job.JobScheduler.class).cancel(JOB_ID);
             }
-            if (connection.getResponseCode() >= 400) {
-                if (connection.getResponseCode() == 403) {
-                    if (token.equals(preferences.getString("token", ""))) {
-                        preferences.edit().clear().apply();
-                        getSystemService(android.app.job.JobScheduler.class).cancel(JOB_ID);
-                    }
-                    return;
-                }
-                throw new java.io.IOException("Alerts unavailable");
-            }
-            try (var reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
-                StringBuilder json = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) json.append(line);
-                results = new JSONArray(json.toString());
-            }
-        } finally {
-            connection.disconnect();
+            return;
         }
         NotificationManager notifications = getSystemService(NotificationManager.class);
         boolean english = "en".equals(preferences.getString("language", "sv"));
@@ -105,21 +82,80 @@ public final class AlertsJob extends JobService {
                 continue;
             }
             if ("cancelled".equals(kind)) ReminderReceiver.cancelEvent(this,eventId);
-            int tag = Long.hashCode(id);
-            Intent open = new Intent(this, MainActivity.class).putExtra(OPEN_EVENT, eventId)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            PendingIntent intent = PendingIntent.getActivity(this, tag, open,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            Notification notification = new Notification.Builder(this, CHANNEL)
-                .setSmallIcon(getApplicationInfo().icon)
-                .setContentTitle(alert.getString("title"))
-                .setContentText(label(alert.getString("kind"),english))
-                .setVisibility(Notification.VISIBILITY_PRIVATE)
-                .setContentIntent(intent).setAutoCancel(true).build();
-            if (notifications.areNotificationsEnabled()) notifications.notify(tag, notification);
+            notifyEvent(notifications, Long.hashCode(id), eventId, alert.getString("title"), label(kind,english));
             cursor = id;
         }
-        if (token.equals(preferences.getString("token",""))) preferences.edit().putLong("cursor",cursor).apply();
+        if (token.equals(preferences.getString("token",""))) {
+            preferences.edit().putLong("cursor",cursor).apply();
+            pollNeighborhood(origin, token, preferences, notifications, english);
+        }
+    }
+
+    private void pollNeighborhood(String origin, String token, SharedPreferences preferences,
+                                  NotificationManager notifications, boolean english) throws Exception {
+        String area = preferences.getString("area", "");
+        long owner = preferences.getLong("owner", 0);
+        if (area.trim().isEmpty() || owner <= 0 || !notifications.areNotificationsEnabled()) return;
+        long seen = preferences.getLong("seenEvent", -1);
+        JSONArray events = post(origin + "/rpc", new JSONObject().put("action", "events"));
+        if (events == null) throw new java.io.IOException("Meetups unavailable");
+        long newest = seen;
+        for (int i = 0; i < events.length(); i++) {
+            if (Thread.currentThread().isInterrupted() || !token.equals(preferences.getString("token",""))
+                || !area.equals(preferences.getString("area",""))) return;
+            JSONObject event = events.getJSONObject(i);
+            long id = event.getLong("id");
+            newest = Math.max(newest, id);
+            if (seen < 0 || id <= seen || event.getLong("owner") == owner || event.optBoolean("hidden")
+                || event.optBoolean("cancelled") || !NeighborhoodAlerts.matches(area,event.optString("area"),event.optString("start"))) continue;
+            int tag = Long.hashCode(id) ^ Integer.MIN_VALUE;
+            notifyEvent(notifications, tag, id, event.getString("title"),
+                english ? "New meetup in your area · " + area : "Ny träff i ditt område · " + area);
+        }
+        if (token.equals(preferences.getString("token","")) && area.equals(preferences.getString("area",""))) {
+            preferences.edit().putLong("seenEvent",Math.max(0, newest)).apply();
+        }
+    }
+
+    private void notifyEvent(NotificationManager notifications, int tag, long eventId, String title, String text) {
+        Intent open = new Intent(this, MainActivity.class).putExtra(OPEN_EVENT, eventId)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        PendingIntent intent = PendingIntent.getActivity(this, tag, open,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        Notification notification = new Notification.Builder(this, CHANNEL)
+            .setSmallIcon(getApplicationInfo().icon)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(intent).setAutoCancel(true).build();
+        if (notifications.areNotificationsEnabled()) notifications.notify(tag, notification);
+    }
+
+    private JSONArray post(String url, JSONObject body) throws Exception {
+        HttpsURLConnection connection = (HttpsURLConnection) new URL(url).openConnection();
+        try {
+            connection.setInstanceFollowRedirects(false);
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setDoOutput(true);
+            try (var output = connection.getOutputStream()) {
+                output.write(body.toString().getBytes(StandardCharsets.UTF_8));
+            }
+            int status = connection.getResponseCode();
+            if (status == 403) return null;
+            if (status != 200) throw new java.io.IOException("Alerts unavailable");
+            try (var reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+                StringBuilder json = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) json.append(line);
+                return new JSONArray(json.toString());
+            }
+        } finally {
+            connection.disconnect();
+        }
     }
 
     private String label(String kind, boolean english) {
