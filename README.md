@@ -1,4 +1,4 @@
-# Hänga Gbg 1.3.1 · Android i Firebase
+# Hänga Gbg 1.3.2 · Android i Firebase
 
 Glavni APK koristi Firebase Authentication i Cloud Firestore. API na Cloudflare Workers provjerava kapacitet događaja, prava organizatora i administratora te pristup privatnim porukama. Firebase Spark i Workers Free mogu se koristiti unutar njihovih besplatnih kvota. Demo je zaseban APK i radi lokalno. Oba APK-a zahtijevaju Android 8.0 ili noviji.
 
@@ -86,3 +86,25 @@ npx wrangler deploy
 ```
 
 Bez tih postavki registracija i Firebase potvrda adrese i dalje rade. Za provjeru slanja registriraj novi račun nakon što postaviš tajne.
+
+## Android uppdateringar från GitHub Releases
+
+Firebase-utgåvan söker efter en ny stabil utgåva när appen startar. Hittar den en nyare version på `tdavor/HangaGBG` laddar den ned `Hanga-Gbg-Firebase.apk`. Appen kontrollerar paketnamn, versionsnummer och APK:ns signeringscertifikat mot den installerade appen. Android ber användaren bekräfta installationen. På vissa enheter behöver användaren först tillåta installationer från Hänga Gbg.
+
+GitHub Actions-artefakter är testbyggen. För uppdateringar behöver första APK:n och senare utgåvor vara signerade med samma nyckel. Skapa en egen nyckel en gång och spara den privat:
+
+```sh
+keytool -genkeypair -keystore ~/hangagbg-release.keystore -alias hangagbg-release \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Lägg till `HANGA_KEYSTORE_BASE64` (hela keystore-filen base64-kodad), `HANGA_STOREPASS`, `HANGA_KEYPASS` och `HANGA_KEY_ALIAS` som repository secrets under **Settings → Secrets and variables → Actions**. Du kan använda `base64 -w0 ~/hangagbg-release.keystore` som värde för den första hemligheten. Publicera en tagg som matchar APK:ns versionsnamn efter att koden har slagits ihop med `main`. Höj både `versionName` och `versionCode` för nästa utgåva i Gradle och byggskriptet.
+
+```sh
+git switch main
+git pull --ff-only
+git tag v1.3.2
+git push origin v1.3.2
+```
+
+**Publish signed Android release** bygger APK:n och lägger den som en tillgång i en stabil GitHub-utgåva. Distribuera denna signerade APK första gången. Om en tidigare test-APK har en annan signatur måste den tas bort innan den nya kan installeras. Det tar bort de lokala inställningarna på enheten.

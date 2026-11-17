@@ -28,11 +28,13 @@ import java.util.Collections;
 public final class MainActivity extends Activity {
     private static final String HOST = "appassets.androidplatform.net";
     private WebView web;
+    private AppUpdate appUpdate;
     private Runnable pendingAlerts;
     private static final int NOTIFICATION_PERMISSION = 12;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        if (!getPackageName().endsWith(".demo")) appUpdate = new AppUpdate(this);
         web = new WebView(this);
         web.setBackgroundColor(0xff102a25);
         FrameLayout content = new FrameLayout(this);
@@ -150,7 +152,18 @@ public final class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        if (appUpdate != null) appUpdate.resume();
         if (web != null) web.evaluateJavascript("window.hangaRefreshReminders?.()",null);
+    }
+
+    @Override protected void onPause() {
+        if (appUpdate != null) appUpdate.pause();
+        super.onPause();
+    }
+
+    @Override protected void onDestroy() {
+        if (appUpdate != null) appUpdate.destroy();
+        super.onDestroy();
     }
 
     private final class AppActions {

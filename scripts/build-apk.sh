@@ -34,14 +34,14 @@ html = html.replace('<script src="app.js" defer></script>', "")
 html = html.replace("</body>", "<script>" + js + "</script></body>")
 Path(sys.argv[1]).write_text(html)
 PYTHON
-  sed '/android.permission.INTERNET/d; /android.permission.BIND_JOB_SERVICE/d; s/android:label="Hänga Gbg"/android:label="Hänga Gbg Demo"/' \
+  sed '/android.permission.INTERNET/d; /android.permission.REQUEST_INSTALL_PACKAGES/d; /android.permission.BIND_JOB_SERVICE/d; s/android:label="Hänga Gbg"/android:label="Hänga Gbg Demo"/' \
     app/src/main/AndroidManifest.xml > "$manifest"
   package_id=se.hangagbg.android.demo
   apk_name=Hanga-Gbg-Demo.apk
 fi
 "$tools/aapt2" compile --dir app/src/main/res -o "$out/resources.zip"
 "$tools/aapt2" link -I "$platform" --manifest "$manifest" \
-  --rename-manifest-package "$package_id" --version-code 7 --version-name 1.3.1 \
+  --rename-manifest-package "$package_id" --version-code 8 --version-name 1.3.2 \
   --min-sdk-version 26 --target-sdk-version 35 -A "$assets" \
   -o "$out/package.apk" "$out/resources.zip"
 java -m jdk.compiler/com.sun.tools.javac.Main -source 17 -target 17 -classpath "$platform" \
