@@ -1,0 +1,82 @@
+import {Store,googleToken} from "./firestore.mjs";
+import {action,reads} from "./actions.mjs";
+
+const headers = {"Content-Type":"application/json","Cache-Control":"no-store",
+  "Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"POST, OPTIONS",
+  "Access-Control-Allow-Headers":"Authorization, Content-Type"};
+const reply = (body,status=200) => new Response(JSON.stringify(body),{status,headers});
+const errors = new Set(["invalid","loginRequired","blocked","forbidden","missing","past","full","reauth","adult",
+  "closed","quickTime","seatAvailable","cancelled","messageBlocked","reported","confirmEmail","schemaMissing"]);
+
+async function identity(request,env) {
+  const authorization=request.headers.get("Authorization");
+  if (!authorization) return null;
+  const idToken=authorization.match(/^Bearer ([\w.-]{1,8192})$/)?.[1];
+  if (!idToken) throw new Error("loginRequired");
+  let claims;
+  try {
+    const encoded=idToken.split(".")[1].replaceAll("-","+").replaceAll("_","/");
+    claims=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))));
+  } catch { throw new Error("loginRequired"); }
+  if (claims.aud!==env.FIREBASE_PROJECT || claims.iss!=="https://securetoken.google.com/"+env.FIREBASE_PROJECT ||
+      !/^[A-Za-z0-9_-]{1,128}$/.test(claims.sub||"")) throw new Error("loginRequired");
+  // Firebase verifies the signed token, revocation and account before claims are trusted.
+  const response=await fetch("https://identitytoolkit.googleapis.com/v1/accounts:lookup?key="+env.FIREBASE_API_KEY,{
+    method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({idToken})
+  });
+  if (response.status>=500 || response.status===429) throw new Error("authUnavailable");
+  if (!response.ok) throw new Error("loginRequired");
+  const user=(await response.json()).users?.[0];
+  if (!user || user.disabled || user.localId!==claims.sub) throw new Error("loginRequired");
+  return {uid:user.localId,email:user.email,verified:user.emailVerified===true,
+    authTime:claims.auth_time,provider:claims.firebase?.sign_in_provider};
+}
+
+async function deleteAuth(env,token,uid) {
+  const response=await fetch(`https://identitytoolkit.googleapis.com/v1/projects/${env.FIREBASE_PROJECT}/accounts:delete`,{
+    method:"POST",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},
+    body:JSON.stringify({localId:uid})
+  });
+  if (!response.ok && (await response.json()).error?.message!=="USER_NOT_FOUND") throw new Error("authDeletion");
+}
+
+export default {
+  async fetch(request,env) {
+    if (request.method==="OPTIONS") return new Response(null,{status:204,headers});
+    const path=new URL(request.url).pathname;
+    if (request.method!=="POST" || !["/rpc","/alerts"].includes(path)) return reply({error:"missing"},404);
+    try {
+      if (Number(request.headers.get("Content-Length"))>16384) throw new Error("invalid");
+      const raw=await request.text();
+      if (raw.length>16384) throw new Error("invalid");
+      let input;
+      try { input=JSON.parse(raw); } catch { throw new Error("invalid"); }
+      const name=path==="/alerts"?"poll":input?.action;
+      const p=path==="/alerts"?input:(input?.payload??{});
+      if (!p || typeof p!=="object" || Array.isArray(p) || !/^[a-z_]{1,24}$/.test(name||"")) throw new Error("invalid");
+      if (name==="poll" && path!=="/alerts") throw new Error("missing");
+      if (!/^[a-z][a-z0-9-]{4,29}$/.test(env.FIREBASE_PROJECT||"") || !env.FIREBASE_API_KEY || !env.GOOGLE_SERVICE_ACCOUNT) throw new Error("schemaMissing");
+      const caller=path==="/alerts"?null:await identity(request,env);
+      const token=await googleToken(env);
+      const db=new Store(env.FIREBASE_PROJECT,token);
+      if (name==="health") {
+        await db.get("settings","app");
+        return reply({service:"Hanga Gbg Firebase",version:1,apiKey:env.FIREBASE_API_KEY});
+      }
+      const result=await db.run(store=>action(store,name,p,caller,env),!reads.has(name));
+      if (result.deleteAuth) {
+        await deleteAuth(env,token,result.deleteAuth);
+        db.writes.clear();
+        db.remove("identities",result.deleteAuth);
+        db.remove("profiles",result.profileId);
+        await db.send(":commit",{writes:[...db.writes.values()]});
+        return reply({});
+      }
+      return reply(result);
+    } catch(error) {
+      const code=errors.has(error.message)?error.message:"server";
+      if (code==="server") console.error("Hänga GBG backend:",error.message);
+      return reply({error:code},code==="server"||code==="schemaMissing"?503:code==="forbidden"?403:code==="loginRequired"?401:400);
+    }
+  }
+};

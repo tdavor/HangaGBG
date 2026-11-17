@@ -1,0 +1,97 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "notices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "recipients",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "id",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "notices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "recipients",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "id",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sender",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "id",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "recipient",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "id",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "messages",
+      "fieldPath": "body",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "events",
+      "fieldPath": "description",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "events",
+      "fieldPath": "source",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "profiles",
+      "fieldPath": "bio",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "reports",
+      "fieldPath": "context",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "reports",
+      "fieldPath": "reason",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "notices",
+      "fieldPath": "recipients",
+      "indexes": []
+    }
+  ]
+}
