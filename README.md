@@ -1,4 +1,4 @@
-# Hänga Gbg 1.3.2 · Android i Firebase
+# Hänga Gbg 1.3.3 · Android i Firebase
 
 Glavni APK koristi Firebase Authentication i Cloud Firestore. API na Cloudflare Workers provjerava kapacitet događaja, prava organizatora i administratora te pristup privatnim porukama. Firebase Spark i Workers Free mogu se koristiti unutar njihovih besplatnih kvota. Demo je zaseban APK i radi lokalno. Oba APK-a zahtijevaju Android 8.0 ili noviji.
 
@@ -38,7 +38,7 @@ Web API ključ ide u Android konfiguraciju. Privatni ključ servisnog računa os
 
 ## GitHub i APK
 
-Raspakiraj sadržaj ZIP-a u GitHub repozitorij, uključujući `.github`. Pokreni **Actions → Build Android APKs → Run workflow**. U **Artifacts** preuzmi `Hanga-Gbg-Firebase.apk` ili `Hanga-Gbg-Demo.apk`.
+Raspakiraj sadržaj ZIP-a u GitHub repozitorij, uključujući `.github`. Pokreni **Actions → Build Android APKs → Run workflow**. U **Artifacts** preuzmi `HangaGBG.apk` ili `Hanga-Gbg-Demo.apk`.
 
 Za lokalni build koristi JDK 21, Android SDK Platform 35 i Build Tools 35.0.0.
 
@@ -89,7 +89,7 @@ Bez tih postavki registracija i Firebase potvrda adrese i dalje rade. Za provjer
 
 ## Android uppdateringar från GitHub Releases
 
-Firebase-utgåvan söker efter en ny stabil utgåva när appen startar. Hittar den en nyare version på `tdavor/HangaGBG` laddar den ned `Hanga-Gbg-Firebase.apk`. Appen kontrollerar paketnamn, versionsnummer och APK:ns signeringscertifikat mot den installerade appen. Android ber användaren bekräfta installationen. På vissa enheter behöver användaren först tillåta installationer från Hänga Gbg.
+Firebase-utgåvan söker efter en ny stabil utgåva när appen startar. Hittar den en nyare version på `tdavor/HangaGBG` laddar den ned `HangaGBG.apk`. Appen kontrollerar paketnamn, versionsnummer och APK:ns signeringscertifikat mot den installerade appen. Android ber användaren bekräfta installationen. På vissa enheter behöver användaren först tillåta installationer från Hänga Gbg.
 
 GitHub Actions-artefakter är testbyggen. För uppdateringar behöver första APK:n och senare utgåvor vara signerade med samma nyckel. Skapa en egen nyckel en gång och spara den privat:
 
@@ -103,8 +103,10 @@ Lägg till `HANGA_KEYSTORE_BASE64` (hela keystore-filen base64-kodad), `HANGA_ST
 ```sh
 git switch main
 git pull --ff-only
-git tag v1.3.2
-git push origin v1.3.2
+git tag v1.3.3
+git push origin v1.3.3
 ```
+
+Utgåvor innehåller också en kompatibilitetsfil för automatisk uppdatering från v1.3.2. Länka användare till `HangaGBG.apk`.
 
 **Publish signed Android release** bygger APK:n och lägger den som en tillgång i en stabil GitHub-utgåva. Distribuera denna signerade APK första gången. Om en tidigare test-APK har en annan signatur måste den tas bort innan den nya kan installeras. Det tar bort de lokala inställningarna på enheten.

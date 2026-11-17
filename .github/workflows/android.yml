@@ -29,8 +29,8 @@ jobs:
           bash scripts/build-apk.sh demo
       - uses: actions/upload-artifact@v4
         with:
-          name: Hanga-Gbg-Firebase
-          path: app/build/manual/firebase/Hanga-Gbg-Firebase.apk
+          name: HangaGBG
+          path: app/build/manual/firebase/HangaGBG.apk
       - uses: actions/upload-artifact@v4
         with:
           name: Hanga-Gbg-Demo
