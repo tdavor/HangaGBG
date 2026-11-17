@@ -1,0 +1,46 @@
+name: Publish signed Android release
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v4
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Build signed Firebase APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.HANGA_KEYSTORE_BASE64 }}
+          HANGA_STOREPASS: ${{ secrets.HANGA_STOREPASS }}
+          HANGA_KEYPASS: ${{ secrets.HANGA_KEYPASS }}
+          HANGA_KEY_ALIAS: ${{ secrets.HANGA_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          : "${KEYSTORE_BASE64:?Missing HANGA_KEYSTORE_BASE64}"
+          : "${HANGA_STOREPASS:?Missing HANGA_STOREPASS}"
+          : "${HANGA_KEYPASS:?Missing HANGA_KEYPASS}"
+          : "${HANGA_KEY_ALIAS:?Missing HANGA_KEY_ALIAS}"
+          export HANGA_KEYSTORE="$RUNNER_TEMP/hangagbg-release.keystore"
+          trap 'rm -f "$HANGA_KEYSTORE"' EXIT
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$HANGA_KEYSTORE"
+          bash scripts/build-apk.sh firebase
+          apk=app/build/manual/firebase/Hanga-Gbg-Firebase.apk
+          version=$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$apk" |
+            sed -n "1s/.*versionName='\([^']*\)'.*/\1/p")
+          test "v$version" = "$GITHUB_REF_NAME"
+      - name: Attach APK to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" app/build/manual/firebase/Hanga-Gbg-Firebase.apk \
+            --verify-tag --generate-notes --latest
