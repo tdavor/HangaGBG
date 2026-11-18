@@ -30,3 +30,16 @@ header{z-index:3}
 
 #delete-meetup-dialog{width:min(30rem,calc(100% - 2rem));padding:1.2rem;background:var(--panel);color:inherit;border:1px solid var(--line);border-radius:1rem}
 #delete-meetup-dialog::backdrop{background:#071b18bb}
+
+#header-actions{display:flex;align-items:center;gap:.4rem}
+.messages-shortcut.action{min-width:44px;padding:.35rem .55rem;gap:.35rem;font-size:1.15rem}
+.message-count{border-radius:1rem;background:var(--green);color:#102a25;font-size:.75rem;font-weight:750;padding:.1rem .4rem}
+.chat-preview{display:block;color:inherit}
+.chat-preview .message-count{margin-inline-start:.4rem}
+.chat-preview p{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-group{padding:.7rem;max-width:88%;border-inline-start:2px solid var(--line);overflow-wrap:anywhere}
+.chat-group + .chat-group{margin-top:.65rem}
+.chat-own{margin-inline-start:auto;border-inline-start:0;border-inline-end:2px solid var(--green)}
+.chat-entry + .chat-entry{margin-top:.55rem}
+.chat-entry a.action{min-height:34px;font-size:.76rem;margin-inline-start:.4rem}
+.chat-timeline{max-height:55vh;overflow:auto}

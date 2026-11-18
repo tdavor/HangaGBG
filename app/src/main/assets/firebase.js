@@ -165,7 +165,7 @@ const hangaCloud = (() => {
       forget();
       return {};
     }
-    const routes={"/events":data?"create":"events","/me":"me","/messages":"messages","/notices":"notices",
+    const routes={"/events":data?"create":"events","/me":"me","/messages":"messages","/chats":"chat_inbox","/chats/read":"chat_read","/chats/send":"chat_send","/notices":"notices",
       "/admin":"admin","/admin/settings":"admin_settings","/report":"report","/blocks":"block_list",
       "/blocks/change":"block_person","/reports/resolve":"resolve_report","/alerts/on":"alerts_on","/alerts/off":"alerts_off"};
     if (routes[path]) return rpc(routes[path],data||{},access);
