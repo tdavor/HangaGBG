@@ -1,5 +1,8 @@
 # Hänga Gbg 1.4.3 · Android
 
+[**Ladda ner / Download Hänga Gbg för Android (.apk)**](https://github.com/tdavor/HangaGBG/releases/latest/download/HangaGBG.apk)
+
+
 Svenska
 
 Idén till Hänga Gbg föddes ur något jag ofta såg på sociala medier. Många i Göteborg känner sig ensamma och söker någon att ta en fika med, gå en promenad med eller bara umgås med. Efter att ha sett sådana inlägg många gånger skapade jag appen för att göra det enklare att hitta sällskap och faktiskt ses.
