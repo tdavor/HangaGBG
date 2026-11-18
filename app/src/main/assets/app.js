@@ -10,6 +10,10 @@ const copy = {
   cityMeetupHelp:["Välj tid och mötesplats. Efter publicering kan du bjuda in andra och skriva till deltagare i Hänga Gbg. Kontrollera eventuell bokning på Göteborgs Stads webbplats.","Choose a time and meeting point. After publishing, invite others and message participants in Hänga Gbg. Check any booking requirements on the city website."],
   cityShare:["Dela / bjud in","Share / invite"],
   cityInvite:["Vill du följa med?","Want to come along?"],
+  memberProfile:["Profil","Profile"],
+  nameTaken:["Namnet används redan. Välj ett annat namn.","That name is already in use. Choose another one."],
+  spokenLanguages:["Språk jag talar","Languages I speak"],
+  downloadApp:["Ladda ner Hänga Gbg","Download Hänga Gbg"],
   about:["Om","About"], appVersion:["Version","Version"], author:["Skapad av","Author"], interfaceLanguage:["Appens språk","App language"],
   contact:["Kontakta Hänga Gbg","Contact Hänga Gbg"], expired:["Avslutade träffar","Past meetups"],
   repeat:["Skapa en ny träff från denna","Repeat this meetup"], deleteEvent:["Ta bort träffen","Delete meetup"],
@@ -139,11 +143,13 @@ const moods = ["","chill","social","active"];
 const zone = "Europe/Stockholm";
 let lang = localStorage.lang === "en" ? "en" : "sv";
 const demo = window.HANGA_DEMO === true;
+const downloadUrl = "https://github.com/tdavor/HangaGBG/releases/latest/download/HangaGBG.apk";
 const supportUrl = "https://buymeacoffee.com/wjkrddbhyx";
 let base = demo ? "" : (hangaCloud.configuration.url && hangaCloud.configuration.key ? hangaCloud.configuration.url : "");
 let token = demo ? localStorage.hangaDemoToken || "" : hangaCloud.signedIn ? "firebase" : "";
 let pendingEmail = "";
 let blockedPeople=[];
+let memberProfile = null;
 let user = null, events = [], messageList = [], noticeList = [], admin = null;
 let cityItems = [], cityRequest, cityLoadedAt = 0, cityUnavailable = false;
 const cityId = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
@@ -416,6 +422,12 @@ async function load() {
     await cityLoad;
     if (version!==refreshId) return;
     if (page==="messages" && user) messageList=await api("/messages");
+    if (page==="member" && user) {
+      memberProfile=null;
+      const member=await api("/members/"+Number(detail));
+      if (version!==refreshId) return;
+      memberProfile=member;
+    }
     if (page==="profile" && user) blockedPeople=await api("/blocks");
     if (page==="notices" && user) noticeList=(await api("/notices")).filter(notice=>notice.kind!=="reminder");
     if (page==="admin" && user?.admin) admin=await api("/admin");
@@ -452,6 +464,7 @@ function render() {
   else if (page==="auth") html=authPage(id);
   else if (page==="city") html=cityPage(findCity(id));
   else if (page==="profile") html=profilePage();
+  else if (page==="member") html=user?memberPage(Number(id)):`<h1>${t("memberProfile")}</h1><p>${t("loginRequired")}</p>${link("login","#auth","primary")}`;
   else if (page==="event") html=eventPage(events.find(item=>item.id===Number(id)),recipient);
   else if (!user) html=`<h1>${t(page)}</h1><p>${t("loginRequired")}</p>${link("login","#auth","primary")}`;
   else if (page==="create") {
@@ -502,7 +515,7 @@ function authPage(mode) {
   if (mode==="confirm") return `<h1>${t("verify")}</h1><p>${t("confirmEmail")}</p>
     <div class="actions">${action(t("resend"),"data-resend")} ${link("login","#auth","primary")}</div>`;
   return `<h1>${t(register?"register":"login")}</h1><form data-form="${register?"register":"login"}">
-    ${register?field("name","name","","text",'required maxlength="80"')+areaSelect():""}
+    ${register?field("name","name","","text",'required maxlength="80"')+areaSelect()+field("spokenLanguages","languages","","text",'maxlength="150"'):""}
     ${field("email","email",pendingEmail,"email",'required autocomplete="email"')}
     ${passwordField("passwordLabel","password",{policy:register,required:true,autocomplete:register?"new-password":"current-password"})}
     ${register?`<label class="check"><input name="adult" type="checkbox" required> ${t("adultLabel")}</label>`:""}
@@ -666,7 +679,7 @@ function eventPage(e, recipient) {
     !e.waitlisted?command("waitlist","waitlist",true,"primary"):"";
   const waitingButton=e.waitlisted?command("leaveWaitlist","waitlist",false):"";
   return `<h1>${esc(eventTitle(e))}</h1>${eventBadges(e)}<p class="pill">${esc(t(e.category))} · ${price(e)}${e.mood?" · "+esc(t(e.mood)):""}</p>
-    <p>${esc(dateLabel(e.start))} · ${eventAddress(e)}</p><p>${t("organizer")} · ${esc(e.organizer)}</p>
+    <p>${esc(dateLabel(e.start))} · ${eventAddress(e)}</p><p>${t("organizer")} · ${memberLink(e.owner,e.organizer)}</p>
     <p>${Number(e.count)}/${Number(e.capacity)} ${t("attendees").toLowerCase()}</p><p>${esc(e.description)}</p>
     <div class="actions">${link("map",endpoint)}${typeof e.source==="string"&&e.source.startsWith("https://")?link("source",e.source):""}
     ${!e.cancelled?action(t("share"),`data-share="${Number(e.id)}"`):""}
@@ -704,6 +717,16 @@ function plansPage() {
     <div class="card"><h2>${t("expired")}</h2>${archived.map(event=>card(event,link("repeat",`#create/repeat/${Number(event.id)}`))).join("")||`<p>${t("none")}</p>`}</div>
     <div class="card"><h2>${t("saved")}</h2>${plans.map(event=>card(event)).join("")||`<p>${t("noPlans")}</p>`}</div>`;
 }
+function memberLink(id,name) {
+  return user && !demo && Number(id)>0 ? `<a href="#member/${Number(id)}">${esc(name)}</a>` : esc(name);
+}
+function memberPage(id) {
+  const member=memberProfile?.id===id?memberProfile:null;
+  return `<h1>${member?esc(member.name):t("memberProfile")}</h1>${member?`<section class="card">
+    ${member.bio?`<h2>${t("bio")}</h2><p>${esc(member.bio)}</p>`:""}
+    ${member.languages?`<h2>${t("spokenLanguages")}</h2><p>${esc(member.languages)}</p>`:""}
+    </section>${safetyActions(id,"person",id)}`:""}`;
+}
 function profilePage() {
   const language=`<div class="card">${select("interfaceLanguage","appLanguage",[["sv","Svenska"],["en","English"]],lang)}</div>`;
   if (!user) return `<h1>${t("profile")}</h1>${language}<p>${t("loginRequired")}</p>${link("login","#auth","primary")}`;
@@ -726,6 +749,7 @@ function profilePage() {
       ${field("name","name",user.name,"text",'required maxlength="80"')}${field("email","email",user.email,"email","required")}
       ${areaSelect(user.area)}${textArea("bio","bio",user.bio,'maxlength="1500"')}
       ${field("interests","interests",user.interests,"text",'maxlength="300"')}
+      ${field("spokenLanguages","languages",user.languages,"text",'maxlength="150"')}
 
       <details id="profile-password" hidden><summary>${t("passwordLabel")}</summary>${passwordField("current","current")}
       ${passwordField("newPassword","newPassword",{policy:true,autocomplete:"new-password"})}</details>
@@ -754,7 +778,7 @@ function adminPage() {
 function messagesPage() {
   return `<h1>${t("messages")}</h1>${demo?`<p class="muted">${t("messageDemo")}</p>`:""}${action(t("refresh"),"data-refresh")}`+
     (messageList.length?messageList.map(m=>`<article class="card"><h2>${esc(m.title)}</h2>
-      <p class="muted">${esc(m.sender_name)} → ${esc(m.recipient_name)} · ${esc(dateLabel(m.created))}</p>
+      <p class="muted">${memberLink(m.sender,m.sender_name)} → ${memberLink(m.recipient,m.recipient_name)} · ${esc(dateLabel(m.created))}</p>
       <p>${esc(m.body)}</p>${link("reply",`#event/${Number(m.event_id)}/${m.sender===user.id?m.recipient:m.sender}`)}${safetyActions(m.sender===user.id?m.recipient:m.sender,"message",m.id)}</article>`).join(""):`<p>${t("noMessages")}</p>`);
 }
 function noticesPage() {
@@ -839,7 +863,6 @@ document.addEventListener("submit",async event=>{
       location.hash=id||result.id?`event/${id||result.id}`:"plans";
     } else if (mode==="profile") {
       if (data.newPassword && !passwordValid(data.newPassword)) throw new Error("password");
-      data.languages=user.languages||"";
       if (!demo && (data.email.toLowerCase()!==user.email || data.newPassword) && !data.current) {
         $("profile-password").hidden=false;
         $("profile-password").open=true;
@@ -979,8 +1002,9 @@ document.addEventListener("click",async event=>{
     } else if (d.share || d.shareCity) {
       const e=d.shareCity?findCity(d.shareCity):events.find(entry=>entry.id===Number(d.share));
       if (!e) throw new Error("missing");
-      const invite=e.city?`${t("cityInvite")}\n${e.title}\n${dateLabel(e.start)}${e.place?" · "+e.place:""}\n${e.source}`:
-        `Hänga Gbg · ${eventTitle(e)}\n${dateLabel(e.start)} · ${e.place}, ${e.area}\n${e.description||""}${e.source?"\n"+e.source:""}`;
+      const details=e.city?`${t("cityInvite")}\n${e.title}\n${dateLabel(e.start)}${e.place?" · "+e.place:""}\n${e.source}`:
+        `${eventTitle(e)}\n${dateLabel(e.start)} · ${e.place}, ${e.area}\n${e.description||""}${e.source?"\n"+e.source:""}`;
+      const invite=`Hänga Gbg\n${details}\n\n${t("downloadApp")}\n${downloadUrl}`;
       if (window.HangaAndroid) window.HangaAndroid.shareText(invite);
       else if (navigator.share) await navigator.share({text:invite});
       else throw new Error("shareFailed");
@@ -1022,7 +1046,7 @@ document.addEventListener("click",async event=>{
         const e=events.find(item=>item.id===Number(d.event));
         const canMessage=e&&!e.cancelled&&!e.hidden&&(e.joined||e.owner===user.id);
         if ($("participants")) $("participants").innerHTML=result.length?result.map(person=>
-          `<div class="card"><p>${esc(person.name)}</p>${person.id!==user.id&&canMessage?link("message",`#event/${d.event}/${Number(person.id)}`):""}${safetyActions(person.id,"person",person.id)}</div>`).join(""):`<p>${t("waiting")}</p>`;
+          `<div class="card"><p>${memberLink(person.id,person.name)}</p>${person.id!==user.id&&canMessage?link("message",`#event/${d.event}/${Number(person.id)}`):""}${safetyActions(person.id,"person",person.id)}</div>`).join(""):`<p>${t("waiting")}</p>`;
         return;
       }
       if (d.event && d.op==="join" && value && window.HangaAndroid) {
@@ -1048,6 +1072,6 @@ setInterval(()=>{
     if ($("results")) refreshResults();
   });
 },30000);
-window.addEventListener("hashchange",()=>{ window.scrollTo(0,0); render(); load(); });
+window.addEventListener("hashchange",()=>{ memberProfile=null; window.scrollTo(0,0); render(); load(); });
 render();
 load();

@@ -34,7 +34,7 @@ const hangaCloud = (() => {
     PASSWORD_DOES_NOT_MEET_REQUIREMENTS:"password",USER_NOT_FOUND:"loginRequired",CREDENTIAL_TOO_OLD_LOGIN_AGAIN:"reauth",OPERATION_NOT_ALLOWED:"schemaMissing"
   };
   const errors = new Set(["invalid","loginRequired","blocked","forbidden","missing","past","full","reauth","adult",
-    "closed","quickTime","seatAvailable","cancelled","messageBlocked","reported","confirmEmail","schemaMissing","server","authDeletion"]);
+    "closed","quickTime","seatAvailable","cancelled","messageBlocked","reported","confirmEmail","schemaMissing","server","authDeletion","nameTaken"]);
 
   async function call(url, body, access, locale) {
     const headers = {"Content-Type":body instanceof URLSearchParams?"application/x-www-form-urlencoded":"application/json"};
@@ -100,7 +100,7 @@ const hangaCloud = (() => {
       if (!data.name.trim() || data.name.trim().length>80) throw new Error("invalid");
       const result=await auth("signUp",{email,password:data.password,returnSecureToken:true});
       try {
-        await rpc("onboard",{name:data.name,area:data.area,adult:true},result.idToken);
+        await rpc("onboard",{name:data.name,area:data.area,languages:data.languages,adult:true},result.idToken);
       } catch (error) {
         try { await auth("delete",{idToken:result.idToken}); } catch {}
         throw error;
@@ -169,6 +169,8 @@ const hangaCloud = (() => {
       "/admin":"admin","/admin/settings":"admin_settings","/report":"report","/blocks":"block_list",
       "/blocks/change":"block_person","/reports/resolve":"resolve_report","/alerts/on":"alerts_on","/alerts/off":"alerts_off"};
     if (routes[path]) return rpc(routes[path],data||{},access);
+    const member=path.match(/^\/members\/(\d+)$/);
+    if (member) return rpc("member_profile",{id:Number(member[1])},access);
     const event=path.match(/^\/events\/(\d+)\/(edit|delete|moderate|join|save|participants|message|cancel|waitlist)$/);
     if (event) return rpc(event[2]==="delete"?"delete_event":event[2],{...data,id:Number(event[1])},access);
     const account=path.match(/^\/admin\/users\/(\d+)\/(block|delete)$/);
