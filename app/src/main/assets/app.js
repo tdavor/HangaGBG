@@ -37,6 +37,7 @@ const copy = {
   reports:["Anmälningar","Reports"], resolve:["Markera behandlad","Mark resolved"], resolved:["Behandlad","Resolved"],
   alertsOn:["Aktivera Android-aviseringar","Enable Android notifications"], alertsOff:["Stäng av Android-aviseringar","Disable Android notifications"],
   alertsDenied:["Tillåt aviseringar i Android-inställningarna.","Allow notifications in Android settings."],
+  checkUpdates:["Sök efter uppdatering","Check for updates"],
   accountMenu:["Kontomeny","Account menu"],
   localAlertsNote:["Nya träffar i ditt sparade område ingår när Android-aviseringar är aktiverade.","Android notifications include new meetups in your saved area."],
   discover:["Upptäck","Discover"], plans:["Mina planer","My plans"], create:["Skapa","Create"],
@@ -380,8 +381,11 @@ function hasArea(event,area) {
 function render() {
   const [page,id,recipient]=route();
   document.documentElement.lang=lang;
-  $("header-actions").innerHTML=`<div class="actions">${!demo&&!base?link("settings","#settings"):""} ${action(lang==="sv"?"EN":"SV",'data-lang')}</div>`;
-  const nav=["discover","plans","create","messages","profile"];
+  $("header-actions").innerHTML=`<details class="account-menu settings-menu">
+    <summary aria-label="${t("preferences")}" title="${t("preferences")}"><span aria-hidden="true">⚙</span></summary>
+    <div class="account-menu-panel">${link("preferences","#settings")}${link("profile","#profile")}</div>
+  </details>`;
+  const nav=["discover","plans","create","messages"];
   if (user?.admin) nav.push("admin");
   $("nav").innerHTML=nav.map(key=>`<a href="#${key}" ${key===page?'aria-current="page"':""}>${t(key)}</a>`).join("");
   let html;
@@ -408,7 +412,7 @@ function render() {
 function settingsPage() {
   return `<h1>${t("preferences")}</h1><div class="card">
     ${select("interfaceLanguage","appLanguage",[["sv","Svenska"],["en","English"]],lang)}
-    ${link("contact","mailto:t.davor@gmail.com")}</div>
+    <div class="actions">${!demo&&window.HangaAndroid?.checkForUpdate?action(t("checkUpdates"),"data-check-updates"):""}${link("contact","mailto:t.davor@gmail.com")}</div></div>
     ${!demo&&!base?`<p>${t("connectionHelp")}</p><form data-form="settings">
     ${field("url","url",base,"url",'required placeholder="https://hanga-gbg.ditt-konto.workers.dev"')}
     ${field("key","key",hangaCloud.configuration.key,"text",'required autocomplete="off" spellcheck="false"')}
@@ -434,12 +438,12 @@ function authPage(mode) {
     ${passwordField("passwordLabel","password",{policy:register,required:true,autocomplete:register?"new-password":"current-password"})}
     ${register?`<label class="check"><input name="adult" type="checkbox" required> ${t("adultLabel")}</label>`:""}
     <button class="primary">${t(register?"register":"login")}</button></form>
-    <div class="actions">${register?"":action(t("forgotPassword"),"data-forgot-password")} ${link("preferences","#settings")} ${link(register?"login":"register",register?"#auth":"#auth/register")}
+    <div class="actions">${register?"":action(t("forgotPassword"),"data-forgot-password")} ${link(register?"login":"register",register?"#auth":"#auth/register")}
     </div>`;
 }
 function discoverPage() {
   return `<section class="hero"><h1>${t("browse")}</h1><p>${t("intro")}</p><div class="actions">${link("quick","#create/quick","primary")}${link("create","#create")} ${action(t("browseEvents"),"data-browse-events")}</div></section>
-    ${demo?`<p class="muted">${t("demoBanner")}</p>`:!base?`<p>${t("setup")}</p>${link("connect","#settings")}`:""} ${link("preferences","#settings")}
+    ${demo?`<p class="muted">${t("demoBanner")}</p>`:!base?`<p>${t("setup")}</p>${link("connect","#settings")}`:""}
     <details class="discover-filters" ${hasFilters()?"open":""}><summary>${t("searchFilters")}</summary>
     <form id="filter" class="grid">
       <div class="wide">${field("keyword","query",filters.query,"search",`placeholder="${t("search")}"`)}</div>
@@ -609,7 +613,7 @@ function profilePage() {
   return `<div class="rows between account-heading"><h1>${t("profile")}</h1>
     <details class="account-menu"><summary aria-label="${t("accountMenu")}"><span aria-hidden="true">☰</span></summary>
       <div class="account-menu-panel">
-        ${link("plans","#plans")}${link("notices","#notices")}${link("preferences","#settings")}${link("contact","mailto:t.davor@gmail.com")}
+        ${link("plans","#plans")}${link("notices","#notices")}${link("contact","mailto:t.davor@gmail.com")}
         ${action(t("passwordLabel"),'data-account-section="profile-password"')}
         ${blockedPeople.length?action(t("blockedPeople"),'data-account-section="profile-blocked"'):""}
         ${base?action(t("deleteAccount"),'data-account-section="profile-delete"',"danger"):""}
@@ -772,13 +776,14 @@ document.addEventListener("click",async event=>{
     void load();
     return;
   }
-  const menu=document.querySelector(".account-menu[open]");
-  if (menu && !menu.contains(event.target)) menu.open=false;
+  document.querySelectorAll(".account-menu[open]").forEach(menu=>{
+    if (!menu.contains(event.target) || event.target.closest("a")) menu.open=false;
+  });
   const button=event.target.closest("button[type=button]");
   if (!button) return;
   const d=button.dataset;
   if (d.accountSection) {
-    menu.open=false;
+    button.closest(".account-menu").open=false;
     const section=$(d.accountSection);
     section.hidden=false;
     section.open=true;
@@ -819,11 +824,8 @@ document.addEventListener("click",async event=>{
     focusEventList();
     return;
   }
-  if ("lang" in d) {
-    localStorage.lang=lang=lang==="sv"?"en":"sv";
-    syncAlertProfile();
-    window.hangaRefreshReminders();
-    render();
+  if ("checkUpdates" in d) {
+    window.HangaAndroid.checkForUpdate(lang);
     return;
   }
   button.disabled=true;

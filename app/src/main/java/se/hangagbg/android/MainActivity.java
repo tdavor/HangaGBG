@@ -209,6 +209,12 @@ public final class MainActivity extends Activity {
             });
         }
 
+        @JavascriptInterface public void checkForUpdate(String language) {
+            runOnUiThread(() -> {
+                if (appUpdate != null) appUpdate.checkNow("en".equals(language));
+            });
+        }
+
         @JavascriptInterface public void shareText(String text) {
             if (text == null || text.length() > 5000) return;
             runOnUiThread(() -> startActivity(Intent.createChooser(

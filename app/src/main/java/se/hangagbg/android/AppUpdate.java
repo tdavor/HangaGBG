@@ -40,6 +40,8 @@ final class AppUpdate {
     private final Runnable checkDownload = this::checkDownload;
     private boolean foreground;
     private boolean checked;
+    private boolean checking;
+    private boolean english = Locale.getDefault().getLanguage().equals("en");
     private boolean validating;
     private long offered;
 
@@ -52,10 +54,20 @@ final class AppUpdate {
     void resume() {
         foreground=true;
         checkDownload();
-        if (!checked && state.getLong("download",0)==0) {
-            checked=true;
-            worker.execute(this::checkRelease);
-        }
+        if (!checked && state.getLong("download",0)==0) requestCheck(false);
+    }
+
+    void checkNow(boolean english) {
+        this.english=english;
+        offered=0;
+        checkDownload();
+        if (state.getLong("download",0)==0) requestCheck(true);
+    }
+
+    private void requestCheck(boolean manual) {
+        if (checking || activity.isDestroyed()) return;
+        checking=true;
+        worker.execute(()->checkRelease(manual));
     }
 
     void pause() {
@@ -93,7 +105,9 @@ final class AppUpdate {
             connection.setReadTimeout(8000);
             connection.setRequestProperty("Accept","application/vnd.github+json");
             connection.setRequestProperty("User-Agent","HangaGBG-Android");
-            if (connection.getResponseCode()!=200) return null;
+            connection.setUseCaches(false);
+            connection.setRequestProperty("Cache-Control","no-cache");
+            if (connection.getResponseCode()!=200) throw new IOException("Release check failed");
             try (var input=connection.getInputStream(); var bytes=new ByteArrayOutputStream()) {
                 byte[] buffer=new byte[4096];
                 int size;
@@ -108,26 +122,67 @@ final class AppUpdate {
         }
     }
 
-    private void checkRelease() {
+    private void checkRelease(boolean manual) {
         try {
             JSONObject release=release();
-            if (release==null || release.optBoolean("draft") || release.optBoolean("prerelease")) return;
             String tag=release.optString("tag_name");
-            if (compareVersions(tag,current().versionName)<=0) return;
-            JSONArray assets=release.optJSONArray("assets");
-            if (assets==null) return;
+            if (!tag.matches("v[0-9]{1,8}\\.[0-9]{1,8}\\.[0-9]{1,8}")
+                || release.optBoolean("draft") || release.optBoolean("prerelease")) {
+                throw new IOException("Invalid latest release");
+            }
+            if (compareVersions(tag,current().versionName)<=0) {
+                finishCheck(manual,null,null,false);
+                return;
+            }
+            JSONArray assets=release.getJSONArray("assets");
             String expected=DOWNLOAD+tag+"/"+APK;
             for (int i=0;i<assets.length();i++) {
                 JSONObject asset=assets.optJSONObject(i);
                 if (asset!=null && APK.equals(asset.optString("name"))
                     && expected.equals(asset.optString("browser_download_url"))) {
-                    activity.runOnUiThread(()->startDownload(tag,expected));
+                    finishCheck(manual,tag,expected,false);
                     return;
                 }
             }
+            throw new IOException("Release APK unavailable");
         } catch (Exception error) {
             android.util.Log.d("HangaGBG","Release check unavailable",error);
+            finishCheck(manual,null,null,true);
         }
+    }
+
+    private void finishCheck(boolean manual,String tag,String url,boolean failed) {
+        activity.runOnUiThread(()->{
+            checking=false;
+            if (activity.isDestroyed() || !foreground) return;
+            checked=!failed;
+            if (url!=null) {
+                if (state.getLong("download",0)!=0) return;
+                new AlertDialog.Builder(activity)
+                    .setTitle(english?"Update available":"Uppdatering tillgänglig")
+                    .setMessage("Hänga Gbg "+tag)
+                    .setNegativeButton(english?"Later":"Senare",null)
+                    .setPositiveButton(english?"Download":"Ladda ner",(dialog,which)->startDownload(tag,url))
+                    .show();
+            } else if (manual && failed) {
+                showUpdateError(english?"Could not check for updates.":"Det gick inte att söka efter uppdateringar.");
+            } else if (manual) {
+                android.widget.Toast.makeText(activity,english?"You have the latest version.":"Du har den senaste versionen.",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void showUpdateError(String message) {
+        if (!foreground || activity.isDestroyed()) return;
+        new AlertDialog.Builder(activity).setMessage(message)
+            .setNegativeButton(english?"Close":"Stäng",null)
+            .setPositiveButton("GitHub",(dialog,which)->{
+                try {
+                    activity.startActivity(new Intent(Intent.ACTION_VIEW,
+                        Uri.parse("https://github.com/tdavor/HangaGBG/releases/latest")));
+                } catch (android.content.ActivityNotFoundException ignored) {}
+            }).show();
     }
 
     private void startDownload(String tag,String url) {
@@ -143,6 +198,7 @@ final class AppUpdate {
             checkDownload();
         } catch (RuntimeException error) {
             android.util.Log.w("HangaGBG","Update download could not start",error);
+            downloadError();
         }
     }
 
@@ -159,6 +215,7 @@ final class AppUpdate {
             int status=row.getInt(row.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
             if (status==DownloadManager.STATUS_FAILED) {
                 clear(id);
+                downloadError();
             } else if (status==DownloadManager.STATUS_SUCCESSFUL && offered!=id) {
                 String file=row.getString(row.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI));
                 validating=true;
@@ -194,6 +251,7 @@ final class AppUpdate {
             if (activity.isDestroyed() || state.getLong("download",0)!=id) return;
             if (!allowed) {
                 clear(id);
+                showUpdateError(english?"The update could not be verified.":"Uppdateringen kunde inte verifieras.");
                 return;
             }
             if (foreground) install(id);
@@ -209,7 +267,6 @@ final class AppUpdate {
         try {
             if (!activity.getPackageManager().canRequestPackageInstalls()) {
                 offered=id;
-                boolean english=Locale.getDefault().getLanguage().equals("en");
                 new AlertDialog.Builder(activity)
                     .setTitle(english?"Update ready":"Uppdatering klar")
                     .setMessage(english?"Allow Hänga Gbg to open the Android installer.":"Tillåt Hänga Gbg att öppna Androids installationsprogram.")
@@ -226,7 +283,12 @@ final class AppUpdate {
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));
         } catch (RuntimeException error) {
             android.util.Log.w("HangaGBG","Could not open Android installer",error);
+            showUpdateError(english?"Could not open the Android installer.":"Det gick inte att öppna Androids installationsprogram.");
         }
+    }
+
+    private void downloadError() {
+        showUpdateError(english?"The update download failed.":"Det gick inte att ladda ner uppdateringen.");
     }
 
     private void clear(long id) {

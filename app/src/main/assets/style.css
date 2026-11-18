@@ -25,3 +25,7 @@ main{padding-bottom:9rem}
 .account-menu-panel > :is(a,button){justify-content:flex-start;text-align:left}
 .account-menu-panel small{padding:.3rem .5rem}
 [id^="profile-"]{scroll-margin-top:5rem}
+
+header{z-index:3}
+.settings-menu{margin:0}
+.account-menu summary:focus-visible{outline:2px solid var(--green);outline-offset:3px}
