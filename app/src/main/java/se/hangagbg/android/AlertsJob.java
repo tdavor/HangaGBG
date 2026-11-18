@@ -25,6 +25,7 @@ public final class AlertsJob extends JobService {
     static final String CHANNEL = "hangagbg_updates";
     static final int JOB_ID = 120;
     static final String OPEN_EVENT = "open_event";
+    static final String OPEN_CHAT = "open_chat";
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private Future<?> work;
 
@@ -77,12 +78,13 @@ public final class AlertsJob extends JobService {
             long eventId = alert.getLong("event_id");
             String kind = alert.getString("kind");
             if ("removed".equals(kind)) ReminderReceiver.cancelEvent(this,eventId);
-            if ("reminder".equals(kind) || "removed".equals(kind)) {
+            if ("reminder".equals(kind) || "removed".equals(kind) || "message_skipped".equals(kind)) {
                 cursor = id;
                 continue;
             }
             if ("cancelled".equals(kind)) ReminderReceiver.cancelEvent(this,eventId);
-            notifyEvent(notifications, Long.hashCode(id), eventId, alert.getString("title"), label(kind,english));
+            long peer = "message".equals(kind) ? alert.optLong("sender_id", -1) : 0;
+            notifyEvent(notifications, Long.hashCode(id), eventId, peer, alert.getString("title"), label(kind,english));
             cursor = id;
         }
         if (token.equals(preferences.getString("token",""))) {
@@ -109,7 +111,7 @@ public final class AlertsJob extends JobService {
             if (seen < 0 || id <= seen || event.getLong("owner") == owner || event.optBoolean("hidden")
                 || event.optBoolean("cancelled") || !NeighborhoodAlerts.matches(area,event.optString("area"),event.optString("start"))) continue;
             int tag = Long.hashCode(id) ^ Integer.MIN_VALUE;
-            notifyEvent(notifications, tag, id, event.getString("title"),
+            notifyEvent(notifications, tag, id, 0, event.getString("title"),
                 english ? "New meetup in your area · " + area : "Ny träff i ditt område · " + area);
         }
         if (token.equals(preferences.getString("token","")) && area.equals(preferences.getString("area",""))) {
@@ -117,8 +119,8 @@ public final class AlertsJob extends JobService {
         }
     }
 
-    private void notifyEvent(NotificationManager notifications, int tag, long eventId, String title, String text) {
-        Intent open = new Intent(this, MainActivity.class).putExtra(OPEN_EVENT, eventId)
+    private void notifyEvent(NotificationManager notifications, int tag, long eventId, long peer, String title, String text) {
+        Intent open = new Intent(this, MainActivity.class).putExtra(OPEN_EVENT, eventId).putExtra(OPEN_CHAT, peer)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent intent = PendingIntent.getActivity(this, tag, open,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);

@@ -28,6 +28,7 @@ import java.util.Collections;
 public final class MainActivity extends Activity {
     private static final String HOST = "appassets.androidplatform.net";
     private WebView web;
+    private boolean webReady;
     private AppUpdate appUpdate;
     private static final int NOTIFICATION_PERMISSION = 12;
 
@@ -62,7 +63,8 @@ public final class MainActivity extends Activity {
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
-                openEvent(getIntent());
+                webReady = true;
+                openNotification(getIntent());
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
@@ -123,18 +125,21 @@ public final class MainActivity extends Activity {
         catch (android.content.ActivityNotFoundException ignored) {}
     }
 
-    private void openEvent(Intent intent) {
-        long id = intent.getLongExtra(AlertsJob.OPEN_EVENT,0);
-        if (id > 0) {
-            intent.removeExtra(AlertsJob.OPEN_EVENT);
-            web.evaluateJavascript("location.hash = 'event/" + id + "'", null);
-        }
+    private void openNotification(Intent intent) {
+        if (!webReady) return;
+        long peer = intent.getLongExtra(AlertsJob.OPEN_CHAT,0);
+        long event = intent.getLongExtra(AlertsJob.OPEN_EVENT,0);
+        if (peer==0 && event<=0) return;
+        intent.removeExtra(AlertsJob.OPEN_CHAT);
+        intent.removeExtra(AlertsJob.OPEN_EVENT);
+        String route = peer>0 ? "messages/"+peer : peer<0 ? "messages" : "event/"+event;
+        web.evaluateJavascript("location.hash = '"+route+"'; window.hangaRefreshChats?.();", null);
     }
 
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        openEvent(intent);
+        openNotification(intent);
     }
 
     @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] grants) {
@@ -145,7 +150,7 @@ public final class MainActivity extends Activity {
 
     private void refreshNotifications() {
         if (web != null) web.evaluateJavascript(
-            "window.hangaRefreshReminders?.(); window.hangaSyncAlerts?.();",null);
+            "window.hangaRefreshReminders?.(); window.hangaSyncAlerts?.(); window.hangaRefreshChats?.();",null);
     }
 
     @Override protected void onResume() {

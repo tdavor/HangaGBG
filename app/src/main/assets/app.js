@@ -10,6 +10,8 @@ const copy = {
   cityMeetupHelp:["Välj tid och mötesplats. Efter publicering kan du bjuda in andra och skriva till deltagare i Hänga Gbg. Kontrollera eventuell bokning på Göteborgs Stads webbplats.","Choose a time and meeting point. After publishing, invite others and message participants in Hänga Gbg. Check any booking requirements on the city website."],
   cityShare:["Dela / bjud in","Share / invite"],
   cityInvite:["Vill du följa med?","Want to come along?"],
+  conversations:["Konversationer","Conversations"],
+  unreadMessages:["Olästa meddelanden","Unread messages"],
   memberProfile:["Profil","Profile"],
   nameTaken:["Namnet används redan. Välj ett annat namn.","That name is already in use. Choose another one."],
   spokenLanguages:["Språk jag talar","Languages I speak"],
@@ -293,6 +295,7 @@ function syncAlertProfile() {
 }
 window.hangaSyncAlerts=syncAlertProfile;
 function session(result) {
+  messageList=[];
   token=result?.token || "";
   user=result?.user || null;
   if (demo) {
@@ -440,13 +443,17 @@ async function load() {
     }
     await cityLoad;
     if (version!==refreshId) return;
-    if (page==="messages" && user) messageList=await api("/messages");
+    if (page==="messages" && user) {
+      await refreshChats();
+      if (version===refreshId && $("chat-content")) return;
+    }
     if (page==="member" && user) {
       memberProfile=null;
       const member=await api("/members/"+Number(detail));
       if (version!==refreshId) return;
       memberProfile=member;
     }
+    if (page!=="messages" && user) window.hangaRefreshChats();
     if (page==="profile" && user) blockedPeople=await api("/blocks");
     if (page==="notices" && user) noticeList=(await api("/notices")).filter(notice=>notice.kind!=="reminder");
     if (page==="admin" && user?.admin) admin=await api("/admin");
@@ -469,13 +476,15 @@ function hasArea(event,area) {
 function render() {
   const [page,id,recipient]=route();
   document.documentElement.lang=lang;
-  const pages=["discover","plans","create","messages","profile","about"];
+  const pages=["discover","plans","create","profile","about"];
   if (user?.admin) pages.push("admin");
   const menuLinks=pages.map(key=>`<a class="action" href="#${key}" ${page===key?'aria-current="page"':""}>${t(key)}</a>`).join("");
-  $("header-actions").innerHTML=`<details class="account-menu settings-menu">
+  $("header-actions").innerHTML=`<a class="messages-shortcut action" href="#messages" aria-label="${t("messages")}" title="${t("messages")}" ${page==="messages"?'aria-current="page"':""}>
+    <span aria-hidden="true">✉</span><span id="unread-messages" class="message-count" hidden></span></a><details class="account-menu settings-menu">
     <summary aria-label="${t("accountMenu")}" title="${t("accountMenu")}"><span aria-hidden="true">⚙</span></summary>
     <nav class="account-menu-panel" aria-label="${t("accountMenu")}">${menuLinks}</nav>
   </details>`;
+  updateChatBadge();
   let html;
   if (page==="about") html=aboutPage();
   else if (page==="connect" && !demo && !base) html=connectionPage();
@@ -485,6 +494,8 @@ function render() {
   else if (page==="profile") html=profilePage();
   else if (page==="member") html=user?memberPage(Number(id)):`<h1>${t("memberProfile")}</h1><p>${t("loginRequired")}</p>${link("login","#auth","primary")}`;
   else if (page==="event") html=eventPage(events.find(item=>item.id===Number(id)),recipient);
+  else if (page==="messages" && !user) html=`<h1>${t("messages")}</h1><p>${t("loginRequired")}</p>
+    ${link("login",Number(id)>0?`#auth/login/chat/${Number(id)}`:"#auth","primary")}`;
   else if (!user) html=`<h1>${t(page)}</h1><p>${t("loginRequired")}</p>${link("login","#auth","primary")}`;
   else if (page==="create") {
     const draft=user.admin&&id==="draft"?starterMeetups[Number(recipient)]:null;
@@ -496,10 +507,11 @@ function render() {
   else if (page==="report") html=reportPage(id,recipient);
   else if (page==="plans") html=plansPage();
   else if (page==="admin") html=user.admin && admin ? adminPage() : `<h1>${t("admin")}</h1><p>${t("forbidden")}</p>`;
-  else if (page==="messages") html=messagesPage();
+  else if (page==="messages") html=messagesPage(Number(id));
   else if (page==="notices") html=noticesPage();
   else html=discoverPage();
   $("main").innerHTML=html;
+  if (page==="messages") scrollChatToLatest();
 }
 function aboutPage() {
   const version=window.HangaAndroid?.appVersion?.()||"";
@@ -792,15 +804,105 @@ function adminPage() {
     ${action(t("delete"),`data-account="${Number(u.id)}" data-op="delete"`,"danger")}</div>`}</article>`).join("")}
     <h2>${t("events")} · ${events.length}</h2>${events.map(e=>card(e,action(t("deleteEvent"),`data-event="${Number(e.id)}" data-op="delete"`,"danger"))).join("")}`;
 }
-function messagesPage() {
-  return `<h1>${t("messages")}</h1>${demo?`<p class="muted">${t("messageDemo")}</p>`:""}${action(t("refresh"),"data-refresh")}`+
-    (messageList.length?messageList.map(m=>`<article class="card"><h2>${esc(m.title)}</h2>
-      <p class="muted">${memberLink(m.sender,m.sender_name)} → ${memberLink(m.recipient,m.recipient_name)} · ${esc(dateLabel(m.created))}</p>
-      <p>${esc(m.body)}</p>${link("reply",`#event/${Number(m.event_id)}/${m.sender===user.id?m.recipient:m.sender}`)}${safetyActions(m.sender===user.id?m.recipient:m.sender,"message",m.id)}</article>`).join(""):`<p>${t("noMessages")}</p>`);
+function chatThreads() {
+  const threads=new Map();
+  for (const message of messageList) {
+    const outgoing=message.sender===user.id;
+    const peer=outgoing?message.recipient:message.sender;
+    if (!threads.has(peer)) threads.set(peer,{peer,name:outgoing?message.recipient_name:message.sender_name,items:[],unread:0});
+    const thread=threads.get(peer);
+    thread.items.push(message);
+    if (message.unread) thread.unread++;
+  }
+  return threads;
 }
+function updateChatBadge() {
+  const badge=$("unread-messages");
+  if (!badge) return;
+  const count=user?messageList.filter(m=>m.unread).length:0;
+  badge.hidden=count===0;
+  badge.textContent=String(count);
+  badge.parentElement.setAttribute("aria-label",count?`${t("messages")}. ${t("unreadMessages")} ${count}`:t("messages"));
+}
+function chatContent(peer) {
+  const threads=chatThreads();
+  if (!peer) return threads.size?`<div class="chat-list">${[...threads.values()].map(thread=>`<a class="card chat-preview" href="#messages/${Number(thread.peer)}">
+    <strong>${esc(thread.name)}</strong>${thread.unread?`<span class="message-count">${thread.unread}</span>`:""}
+    <p class="muted">${esc(thread.items[0].body)}</p><small>${esc(dateLabel(thread.items[0].created))}</small>
+    </a>`).join("")}</div>`:`<p>${t("noMessages")}</p>`;
+  const thread=threads.get(peer);
+  if (!thread) return `<p>${t("noMessages")}</p>`;
+  const groups=[];
+  for (const message of [...thread.items].reverse()) {
+    const previous=groups[groups.length-1];
+    if (previous?.sender===message.sender) previous.items.push(message);
+    else groups.push({sender:message.sender,items:[message]});
+  }
+  return `<h2>${memberLink(peer,thread.name)}</h2><div class="card chat-timeline">${groups.map(({sender,items})=>`
+    <section class="chat-group ${sender===user.id?"chat-own":""}">
+      <strong>${esc(sender===user.id?user.name:thread.name)}</strong>
+      ${items.map(m=>`<div class="chat-entry"><p>${esc(m.body)}</p><small class="muted">${esc(dateLabel(m.created))}</small>
+        ${sender===peer?link("reportMessage",`#report/message/${Number(m.id)}`):""}</div>`).join("")}</section>`).join("")}
+    </div>${safetyActions(peer,"person",peer)}`;
+}
+function scrollChatToLatest() {
+  const timeline=document.querySelector(".chat-timeline");
+  if (timeline) timeline.scrollTop=timeline.scrollHeight;
+}
+function messagesPage(peer) {
+  return `<h1>${t("messages")}</h1>${demo?`<p class="muted">${t("messageDemo")}</p>`:""}
+    ${peer?link("conversations","#messages"):""}<div id="chat-content">${chatContent(peer)}</div>
+    ${peer?`<form id="chat-compose" data-form="chat" data-peer="${peer}" ${chatThreads().has(peer)?"":"hidden"}>
+      ${textArea("message","body","","required maxlength=1500")}<button class="primary">${t("send")}</button></form>`:""}`;
+}
+let chatsRequest;
+function refreshChats() {
+  if (!user || (!demo&&!base)) return Promise.resolve();
+  if (chatsRequest) return chatsRequest;
+  const owner=user.id;
+  chatsRequest=(async()=>{
+    const rows=await api(demo?"/messages":"/chats");
+    if (user?.id!==owner) return;
+    const [page,id]=route();
+    if (page==="messages" && id && !demo && document.visibilityState!=="hidden") {
+      const peer=Number(id);
+      const unread=rows.filter(m=>m.sender===peer&&m.recipient===owner&&m.unread);
+      if (unread.length) {
+        await api("/chats/read",{peer,through:unread.reduce((latest,m)=>Math.max(latest,m.id),0)});
+        if (user?.id!==owner) return;
+        for (const message of unread) message.unread=false;
+      }
+    }
+    messageList=rows;
+    updateChatBadge();
+    const pane=$("chat-content");
+    if (route()[0]==="messages" && pane) {
+      const peer=Number(route()[1]);
+      const html=chatContent(peer);
+      if (pane.dataset.last!==html) {
+        const previous=pane.querySelector(".chat-timeline");
+        const scroll=previous?.scrollTop||0;
+        const atEnd=!previous||previous.scrollHeight-scroll-previous.clientHeight<48;
+        pane.innerHTML=html;
+        pane.dataset.last=html;
+        const timeline=pane.querySelector(".chat-timeline");
+        if (timeline) timeline.scrollTop=atEnd?timeline.scrollHeight:scroll;
+      }
+      if ($("chat-compose")) $("chat-compose").hidden=!chatThreads().has(peer);
+    }
+  })().finally(()=>{chatsRequest=undefined;});
+  return chatsRequest;
+}
+window.hangaRefreshChats=()=>{void refreshChats().catch(()=>{});};
+document.addEventListener("visibilitychange",()=>{
+  if (document.visibilityState!=="hidden") window.hangaRefreshChats();
+});
+setInterval(()=>{
+  if (document.visibilityState!=="hidden") window.hangaRefreshChats();
+},15000);
 function noticesPage() {
   return `<h1>${t("notices")}</h1>${action(t("refresh"),"data-refresh")}`+
-    (noticeList.length?noticeList.map(n=>`<article class="card"><h2><a href="#event/${Number(n.event_id)}">${esc(n.title)}</a></h2>
+    (noticeList.length?noticeList.map(n=>`<article class="card"><h2><a href="${n.kind==="message"?(n.sender_id?"#messages/"+Number(n.sender_id):"#messages"):"#event/"+Number(n.event_id)}">${esc(n.title)}</a></h2>
       <p>${esc(n.name)} ${t(n.kind==="message"?"messageNotice":n.kind)} · ${esc(dateLabel(n.created))}</p></article>`).join(""):`<p>${t("noNotices")}</p>`);
 }
 document.addEventListener("input",event=>{
@@ -848,8 +950,9 @@ document.addEventListener("submit",async event=>{
       }
       session(response);
       pendingEmail="";
-      const city=route()[2];
-      location.hash=mode==="login" && cityId.test(city||"")?`create/city/${city}`:"profile";
+      const [,,context,peer]=route();
+      location.hash=mode==="login" && cityId.test(context||"")?`create/city/${context}`:
+        mode==="login" && context==="chat" && /^\d+$/.test(peer||"")?`messages/${peer}`:"profile";
     } else if (mode==="reset") {
       pendingEmail=data.email.trim().toLowerCase();
       await api("/password/reset",{email:pendingEmail,locale:lang});
@@ -899,9 +1002,21 @@ document.addEventListener("submit",async event=>{
       await api("/account/delete",{...data,email:user.email});
       session();
       location.hash="discover";
+    } else if (mode==="chat") {
+      const peer=Number(form.dataset.peer);
+      if (demo) {
+        const latest=chatThreads().get(peer)?.items[0];
+        if (!latest) throw new Error("missing");
+        await api(`/events/${latest.event_id}/message`,{recipient:peer,body:data.body});
+      } else await api("/chats/send",{peer,body:data.body});
+      form.reset();
+      if (chatsRequest) await chatsRequest;
+      await refreshChats();
+      scrollChatToLatest();
+      return;
     } else if (mode==="message") {
       await api(`/events/${form.dataset.id}/message`,{recipient:Number(form.dataset.recipient),body:data.body});
-      location.hash="messages";
+      location.hash="messages/"+Number(form.dataset.recipient);
     }
     status("done");
     await load();

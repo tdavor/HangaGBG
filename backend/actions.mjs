@@ -104,26 +104,27 @@ async function eventList(db, me) {
   }).sort((a,b)=>a.start.localeCompare(b.start)||a.id-b.id);
 }
 
-async function messages(db,id) {
+async function messages(db,id,chat=false) {
   const [sent,received,blocked,blocking] = await Promise.all([
-    db.query("messages",[eq("sender",id)],descending,150),
-    db.query("messages",[eq("recipient",id)],descending,150),
+    db.query("messages",[eq("sender",id)],descending,chat?undefined:150),
+    db.query("messages",[eq("recipient",id)],descending,chat?undefined:150),
     db.query("blocks",[eq("blocker",id)]),db.query("blocks",[eq("blocked",id)])
   ]);
   const denied = new Set([...blocked.map(b=>b.blocked),...blocking.map(b=>b.blocker)]);
-  const items = [...sent,...received].sort(sortNewest).slice(0,150);
+  const sorted = [...sent,...received].sort(sortNewest);
+  const items = chat?sorted:sorted.slice(0,150);
   const people = await db.getMany("profiles",items.flatMap(m=>[m.sender,m.recipient]));
   const events = await db.getMany("events",items.map(m=>m.event_id));
   return items.flatMap(m=>{
     const sender = people.get(String(m.sender));
     const recipient = people.get(String(m.recipient));
     const event = events.get(String(m.event_id));
-    if (!sender || !recipient || sender.deleted || recipient.deleted || !event || denied.has(m.sender) || denied.has(m.recipient)) return [];
-    return [{...m,title:event.title,sender_name:sender.name,recipient_name:recipient.name}];
+    if (!sender || !recipient || sender.deleted || recipient.deleted || (chat && (sender.blocked || recipient.blocked)) || !event || denied.has(m.sender) || denied.has(m.recipient)) return [];
+    return [{...m,title:m.title||event?.title||"",sender_name:sender.name,recipient_name:recipient.name}];
   });
 }
 
-export const reads = new Set(["events","me","registration","participants","messages","notices","admin","block_list","poll","member_profile"]);
+export const reads = new Set(["events","me","registration","participants","messages","notices","admin","block_list","poll","member_profile","chat_inbox"]);
 export async function action(db, name, p, identity, env) {
   if (name==="registration") return {registration:(await db.get("settings","app"))?.registration!==false};
   if (name==="poll") {
@@ -134,7 +135,22 @@ export async function action(db, name, p, identity, env) {
     const after = integer(p.after_id,0);
     const alerts = await db.query("notices",[byRecipient(user.id),["id","GREATER_THAN",after]],ascending,50);
     const events=await db.getMany("events",alerts.map(row=>row.event_id));
-    return alerts.map(({id,kind,event_id,title})=>({id,kind:(kind==="cancelled" || events.has(String(event_id)))?kind:"removed",event_id,title}));
+    const legacy=await db.getMany("messages",alerts.filter(a=>a.kind==="message"&&!a.sender_id).map(a=>a.id-1));
+    const senders=[...new Set(alerts.filter(a=>a.kind==="message").map(a=>a.sender_id||legacy.get(String(a.id-1))?.sender).filter(Boolean))];
+    const [people,blocks]=await Promise.all([
+      db.getMany("profiles",senders),db.getMany("blocks",senders.flatMap(sender=>[planKey(user.id,sender),planKey(sender,user.id)]))
+    ]);
+    return alerts.map(({id,kind,event_id,title,sender_id})=>{
+      if (kind==="message") {
+        const sender=sender_id||legacy.get(String(id-1))?.sender;
+        const profile=people.get(String(sender));
+        if (events.has(String(event_id)) && profile && !profile.deleted && !profile.blocked && !blocks.has(planKey(user.id,sender)) && !blocks.has(planKey(sender,user.id))) {
+          return {id,kind,event_id,title:profile.name,sender_id:sender};
+        }
+        return {id,kind:"message_skipped",event_id,title};
+      }
+      return {id,kind:(kind==="cancelled" || events.has(String(event_id)))?kind:"removed",event_id,title};
+    });
   }
   const link = identity && await db.get("identities",identity.uid);
   const me = link && await db.get("profiles",link.id);
@@ -178,6 +194,36 @@ export async function action(db, name, p, identity, env) {
     return {id,name:member.name,bio:member.bio||"",languages:member.languages||""};
   }
   if (name==="messages") return messages(db,uid);
+  if (name==="chat_inbox") {
+    const rows=await messages(db,uid,true);
+    const peers=[...new Set(rows.map(m=>m.sender===uid?m.recipient:m.sender))];
+    const seen=await db.getMany("chat_reads",peers.map(peer=>planKey(uid,peer)));
+    return rows.map(m=>({...m,unread:m.recipient===uid && m.id>(seen.get(planKey(uid,m.sender))?.through||0)}));
+  }
+  if (name==="chat_read") {
+    const peer=integer(p.peer);
+    const through=integer(p.through);
+    const message=await db.get("messages",through);
+    if (!message || message.sender!==peer || message.recipient!==uid) fail("missing");
+    const key=planKey(uid,peer);
+    const existing=await db.get("chat_reads",key);
+    if ((existing?.through||0)<through) db.put("chat_reads",key,{owner:uid,peer,through});
+    return {};
+  }
+  if (name==="chat_send") {
+    const peer=integer(p.peer);
+    await messagingPeer(db,uid,peer);
+    const [sent,received]=await Promise.all([
+      db.query("messages",[eq("sender",uid),eq("recipient",peer)]),
+      db.query("messages",[eq("sender",peer),eq("recipient",uid)])
+    ]);
+    const eventIds=new Set([...sent,...received].sort(sortNewest).map(m=>m.event_id));
+    for (const id of eventIds) {
+      try { return await eventAction(db,"message",{id,recipient:peer,body:p.body},me); }
+      catch (error) { if (!["forbidden","missing","cancelled"].includes(error.message)) throw error; }
+    }
+    fail("forbidden");
+  }
   if (name==="notices") {
     const rows=await readNotices(db,uid);
     const events=await db.getMany("events",rows.map(row=>row.event_id));
@@ -233,13 +279,15 @@ export async function action(db, name, p, identity, env) {
       }
     }
     if (deleting) {
-      const [sent,received,owned,devices,outgoing,incoming,reportsBy,reportsOn] = await Promise.all([
+      const [sent,received,owned,devices,outgoing,incoming,reportsBy,reportsOn,readBy,readAbout] = await Promise.all([
         db.query("messages",[eq("sender",target.id)]),db.query("messages",[eq("recipient",target.id)]),
         db.query("events",[eq("owner",target.id)]),db.query("devices",[eq("user_id",target.id)]),
         db.query("blocks",[eq("blocker",target.id)]),db.query("blocks",[eq("blocked",target.id)]),
-        db.query("reports",[eq("reporter",target.id)]),db.query("reports",[eq("subject",target.id)])
+        db.query("reports",[eq("reporter",target.id)]),db.query("reports",[eq("subject",target.id)]),
+        db.query("chat_reads",[eq("owner",target.id)]),db.query("chat_reads",[eq("peer",target.id)])
       ]);
       for (const m of [...sent,...received]) db.remove("messages",m.id);
+      for (const marker of [...readBy,...readAbout]) db.remove("chat_reads",planKey(marker.owner,marker.peer));
       for (const e of owned) db.remove("events",e.id);
       for (const device of devices) if (device.id) db.remove("devices",device.id);
       for (const b of [...outgoing,...incoming]) db.remove("blocks",planKey(b.blocker,b.blocked));
@@ -397,18 +445,27 @@ async function eventAction(db,name,p,me) {
   if (name!=="message") fail("missing");
   if (e.cancelled) fail("cancelled");
   const recipient=integer(p.recipient);
+  await messagingPeer(db,uid,recipient);
+  const plans=await db.getMany("plans",[planKey(id,uid),planKey(id,recipient)]);
+  const senderJoined=uid===e.owner || plans.get(planKey(id,uid))?.joined;
+  const recipientJoined=recipient===e.owner || plans.get(planKey(id,recipient))?.joined;
+  if (!visible || !senderJoined || !recipientJoined) fail("forbidden");
+  return writeMessage(db,me,recipient,id,e.title,p.body);
+}
+
+async function messagingPeer(db,uid,recipient) {
   if (recipient===uid) fail("invalid");
   const [person,blocks]=await Promise.all([db.get("profiles",recipient),
     db.getMany("blocks",[planKey(uid,recipient),planKey(recipient,uid)])]);
   if (!person || person.blocked || person.deleted) fail("missing");
   if (blocks.size) fail("messageBlocked");
-  const plans=await db.getMany("plans",[planKey(id,uid),planKey(id,recipient)]);
-  const senderJoined=uid===e.owner || plans.get(planKey(id,uid))?.joined;
-  const recipientJoined=recipient===e.owner || plans.get(planKey(id,recipient))?.joined;
-  if (!visible || !senderJoined || !recipientJoined) fail("forbidden");
-  const body=text(p.body,1500,1);
+}
+
+async function writeMessage(db,me,recipient,event_id,title,value) {
+  const body=text(value,1500,1);
   const msg=await nextIds(db,2);
-  db.put("messages",msg,{id:msg,event_id:id,sender:uid,recipient,body,created:now()});
-  db.put("notices",msg+1,{id:msg+1,event_id:id,kind:"message",name:me.name,title:e.title,created:now(),recipients:[recipient]});
+  const created=now();
+  db.put("messages",msg,{id:msg,event_id,title,sender:me.id,recipient,body,created});
+  db.put("notices",msg+1,{id:msg+1,event_id,kind:"message",sender_id:me.id,name:me.name,title:title||me.name,created,recipients:[recipient]});
   return {};
 }

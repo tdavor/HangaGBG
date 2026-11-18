@@ -146,3 +146,28 @@ test("registered and legacy names block normalized duplicates while member detai
   await call("block_person",{id:people[0].id,enabled:true},1);
   await assert.rejects(call("member_profile",{id}),{message:"missing"});
 });
+
+test("private chat unread markers belong to the recipient and notifications identify the sender",async()=>{
+  const {call,id,people}=await app();
+  const [host,guest,outsider]=people;
+  const device=await call("alerts_on",{},1);
+  await call("join",{id,enabled:true},1);
+  await call("message",{id,recipient:guest.id,body:"First"});
+  const [first]=await call("chat_inbox",{},1);
+  assert.equal(first.unread,true);
+  assert.equal((await call("chat_inbox"))[0].unread,false);
+  assert.deepEqual(await call("chat_inbox",{},2),[]);
+  await assert.rejects(call("chat_read",{peer:host.id,through:first.id},2),{message:"missing"});
+  await assert.rejects(call("chat_send",{peer:outsider.id,body:"Unexpected"}),{message:"forbidden"});
+  await call("chat_read",{peer:host.id,through:first.id},1);
+  assert.equal((await call("chat_inbox",{},1))[0].unread,false);
+  await call("chat_send",{peer:host.id,body:"Reply"},1);
+  assert.equal((await call("chat_inbox"))[0].unread,true);
+  const alerts=await call("poll",{token:device.token,after_id:device.cursor},null);
+  assert.ok(alerts.some(a=>a.kind==="message"&&a.sender_id===host.id));
+  await call("join",{id,enabled:false},1);
+  await assert.rejects(call("chat_send",{peer:host.id,body:"After leaving"},1),{message:"forbidden"});
+  await call("block_person",{id:host.id,enabled:true},1);
+  assert.deepEqual(await call("chat_inbox",{},1),[]);
+  assert.ok((await call("poll",{token:device.token,after_id:device.cursor},null)).every(a=>a.kind!=="message"));
+});
