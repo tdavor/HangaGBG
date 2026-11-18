@@ -27,6 +27,19 @@ function profileData(p) {
   return {name:text(p.name,80,1),area:text(p.area,100),bio:text(p.bio,1500),
     interests:text(p.interests,300),languages:text(p.languages,150)};
 }
+const normalizedName = name => (name||"").normalize("NFKC").trim().replace(/\s+/gu," ").toLowerCase();
+
+async function requireUniqueName(db, name, current) {
+  const key = normalizedName(name);
+  if (current && normalizedName(current.name)===key) return;
+  // Serialize name claims in the same transaction as the profile write.
+  const revision = (await db.get("settings","profile_names"))?.revision || 0;
+  const profiles = await db.query("profiles");
+  if (profiles.some(profile=>!profile.deleted && profile.id!==current?.id && normalizedName(profile.name)===key)) {
+    fail("nameTaken");
+  }
+  db.put("settings","profile_names",{revision:revision+1});
+}
 function eventData(p, old) {
   const start = Date.parse(p.start);
   if (!Number.isFinite(start)) fail("invalid");
@@ -110,7 +123,7 @@ async function messages(db,id) {
   });
 }
 
-export const reads = new Set(["events","me","registration","participants","messages","notices","admin","block_list","poll"]);
+export const reads = new Set(["events","me","registration","participants","messages","notices","admin","block_list","poll","member_profile"]);
 export async function action(db, name, p, identity, env) {
   if (name==="registration") return {registration:(await db.get("settings","app"))?.registration!==false};
   if (name==="poll") {
@@ -133,6 +146,7 @@ export async function action(db, name, p, identity, env) {
     if (p.adult!==true) fail("adult");
     if ((await db.get("settings","app"))?.registration===false) fail("closed");
     const data = profileData(p);
+    await requireUniqueName(db,data.name);
     const id = await nextIds(db);
     const profile = {...data,id,uid:identity.uid,email:identity.email,admin:identity.uid===env.ADMIN_UID,blocked:false};
     db.put("identities",identity.uid,{id});
@@ -149,9 +163,19 @@ export async function action(db, name, p, identity, env) {
   const uid = me.id;
   if (name==="onboard" || name==="me") return {...publicProfile(me),email:identity.email,admin:me.admin || identity.uid===env.ADMIN_UID};
   if (name==="profile") {
-    const profile = {...me,...profileData(p),email:identity.email};
+    const data = profileData({...p,languages:p.languages??me.languages});
+    await requireUniqueName(db,data.name,me);
+    const profile = {...me,...data,email:identity.email};
     db.put("profiles",uid,profile);
     return publicProfile(profile);
+  }
+  if (name==="member_profile") {
+    const id=integer(p.id);
+    const [member,outgoing,incoming]=await Promise.all([
+      db.get("profiles",id),db.get("blocks",planKey(uid,id)),db.get("blocks",planKey(id,uid))
+    ]);
+    if (!member || member.deleted || member.blocked || outgoing || incoming) fail("missing");
+    return {id,name:member.name,bio:member.bio||"",languages:member.languages||""};
   }
   if (name==="messages") return messages(db,uid);
   if (name==="notices") {

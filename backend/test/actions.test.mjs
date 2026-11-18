@@ -132,3 +132,17 @@ test("a recently reauthenticated user can delete their own account, including an
   assert.deepEqual(await call("delete_account"),deletion);
   assert.deepEqual(await call("delete_account"),deletion);
 });
+
+test("registered and legacy names block normalized duplicates while member details omit email",async()=>{
+  const {db,call,people}=await app();
+  await db.put("profiles",99,{id:99,name:"  Åsa   Lund  ",email:"legacy@example.test"});
+  await assert.rejects(action(db,"onboard",{adult:true,name:"a\u030Asa lund"},
+    {uid:"new",email:"new@example.test",verified:false},{}),{message:"nameTaken"});
+  await assert.rejects(call("profile",{name:" GUEST "}),{message:"nameTaken"});
+  await call("profile",{name:"Guest",bio:"Coffee and walks",languages:"Svenska, English"},1);
+  const id=people[1].id;
+  assert.deepEqual(await call("member_profile",{id}),{id,name:"Guest",bio:"Coffee and walks",languages:"Svenska, English"});
+  await assert.rejects(call("member_profile",{id},null),{message:"loginRequired"});
+  await call("block_person",{id:people[0].id,enabled:true},1);
+  await assert.rejects(call("member_profile",{id}),{message:"missing"});
+});

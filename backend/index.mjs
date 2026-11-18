@@ -8,7 +8,7 @@ const headers = {"Content-Type":"application/json","Cache-Control":"no-store",
   "Access-Control-Allow-Headers":"Authorization, Content-Type"};
 const reply = (body,status=200) => new Response(JSON.stringify(body),{status,headers});
 const errors = new Set(["invalid","loginRequired","blocked","forbidden","missing","past","full","reauth","adult",
-  "closed","quickTime","seatAvailable","cancelled","messageBlocked","reported","confirmEmail","schemaMissing","authDeletion"]);
+  "closed","quickTime","seatAvailable","cancelled","messageBlocked","reported","confirmEmail","schemaMissing","authDeletion","nameTaken"]);
 
 async function identity(request,env) {
   const authorization=request.headers.get("Authorization");
