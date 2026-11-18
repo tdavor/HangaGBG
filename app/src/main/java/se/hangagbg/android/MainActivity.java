@@ -29,7 +29,6 @@ public final class MainActivity extends Activity {
     private static final String HOST = "appassets.androidplatform.net";
     private WebView web;
     private AppUpdate appUpdate;
-    private Runnable pendingAlerts;
     private static final int NOTIFICATION_PERMISSION = 12;
 
     @Override public void onCreate(Bundle state) {
@@ -141,20 +140,24 @@ public final class MainActivity extends Activity {
     @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] grants) {
         super.onRequestPermissionsResult(code,permissions,grants);
         if (code != NOTIFICATION_PERMISSION) return;
-        Runnable setup = pendingAlerts;
-        pendingAlerts = null;
-        if (grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED) {
-            if (setup != null) setup.run();
-            web.evaluateJavascript("window.hangaRefreshReminders?.()",null);
-        } else {
-            web.evaluateJavascript("window.hangaAlertDenied?.()",null);
-        }
+        if (grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED) refreshNotifications();
+    }
+
+    private void refreshNotifications() {
+        if (web != null) web.evaluateJavascript(
+            "window.hangaRefreshReminders?.(); window.hangaSyncAlerts?.();",null);
     }
 
     @Override protected void onResume() {
         super.onResume();
         if (appUpdate != null) appUpdate.resume();
-        if (web != null) web.evaluateJavascript("window.hangaRefreshReminders?.()",null);
+        if (!getPackageName().endsWith(".demo") && android.os.Build.VERSION.SDK_INT >= 33
+            && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            && !getPreferences(MODE_PRIVATE).getBoolean("askedNotificationPermission",false)) {
+            getPreferences(MODE_PRIVATE).edit().putBoolean("askedNotificationPermission",true).apply();
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},NOTIFICATION_PERMISSION);
+        }
+        refreshNotifications();
     }
 
     @Override protected void onPause() {
@@ -172,23 +175,18 @@ public final class MainActivity extends Activity {
             runOnUiThread(() -> ReminderReceiver.sync(MainActivity.this,entries,scope,"en".equals(language)));
         }
 
-        @JavascriptInterface public void requestReminderPermission() {
-            runOnUiThread(() -> {
-                if (android.os.Build.VERSION.SDK_INT >= 33 &&
-                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
-                    !getPreferences(MODE_PRIVATE).getBoolean("askedReminderPermission",false)) {
-                    getPreferences(MODE_PRIVATE).edit().putBoolean("askedReminderPermission",true).apply();
-                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},NOTIFICATION_PERMISSION);
-                }
-            });
+        @JavascriptInterface public boolean notificationsEnabled() {
+            return getSystemService(NotificationManager.class).areNotificationsEnabled();
+        }
+
+        @JavascriptInterface public boolean alertsScheduled(String token) {
+            return !token.isEmpty() && token.equals(getSharedPreferences(AlertsJob.STORAGE,MODE_PRIVATE).getString("token",""))
+                && getSystemService(JobScheduler.class).getPendingJob(AlertsJob.JOB_ID) != null;
         }
 
         @JavascriptInterface public void allowReminders() {
             runOnUiThread(() -> {
-                if (android.os.Build.VERSION.SDK_INT >= 33 &&
-                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},NOTIFICATION_PERMISSION);
-                } else if (!getSystemService(NotificationManager.class).areNotificationsEnabled()) {
+                if (!notificationsEnabled()) {
                     startActivity(new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                         .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE,getPackageName()));
                 }
@@ -235,34 +233,22 @@ public final class MainActivity extends Activity {
                 || !token.matches("[a-f0-9-]{72}") || !cursor.matches("[0-9]{1,16}")
                 || !owner.matches("[0-9]{1,16}") || !latest.matches("[0-9]{1,16}") || area.length()>200) return;
             runOnUiThread(() -> {
-                Runnable setup = () -> {
-                    if (!getSystemService(NotificationManager.class).areNotificationsEnabled()) {
-                        web.evaluateJavascript("window.hangaAlertDenied?.()",null);
-                        return;
-                    }
-                    getSharedPreferences(AlertsJob.STORAGE,MODE_PRIVATE).edit()
-                        .putString("origin",origin).putString("token",token)
-                        .putLong("cursor",Long.parseLong(cursor)).putString("language",language)
-                        .putLong("owner",Long.parseLong(owner)).putString("area",area)
-                        .putLong("seenEvent",Long.parseLong(latest)).apply();
-                    JobInfo job = new JobInfo.Builder(AlertsJob.JOB_ID,new ComponentName(MainActivity.this,AlertsJob.class))
-                        .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-                        .setPeriodic(JobInfo.getMinPeriodMillis()).setPersisted(true).build();
-                    try {
-                        if (getSystemService(JobScheduler.class).schedule(job)==JobScheduler.RESULT_SUCCESS) return;
-                    } catch (IllegalArgumentException | SecurityException error) {
-                        android.util.Log.w("HangaGBG","Could not schedule notifications",error);
-                    }
-                    getSharedPreferences(AlertsJob.STORAGE,MODE_PRIVATE).edit().clear().apply();
-                    web.evaluateJavascript("window.hangaAlertFailed?.()",null);
-                };
-                if (android.os.Build.VERSION.SDK_INT >= 33 &&
-                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                    pendingAlerts = setup;
-                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},NOTIFICATION_PERMISSION);
-                } else {
-                    setup.run();
+                if (!notificationsEnabled()) return;
+                getSharedPreferences(AlertsJob.STORAGE,MODE_PRIVATE).edit()
+                    .putString("origin",origin).putString("token",token)
+                    .putLong("cursor",Long.parseLong(cursor)).putString("language",language)
+                    .putLong("owner",Long.parseLong(owner)).putString("area",area)
+                    .putLong("seenEvent",Long.parseLong(latest)).apply();
+                JobInfo job = new JobInfo.Builder(AlertsJob.JOB_ID,new ComponentName(MainActivity.this,AlertsJob.class))
+                    .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                    .setPeriodic(JobInfo.getMinPeriodMillis()).setPersisted(true).build();
+                try {
+                    if (getSystemService(JobScheduler.class).schedule(job)==JobScheduler.RESULT_SUCCESS) return;
+                } catch (IllegalArgumentException | SecurityException error) {
+                    android.util.Log.w("HangaGBG","Could not schedule notifications",error);
                 }
+                getSharedPreferences(AlertsJob.STORAGE,MODE_PRIVATE).edit().clear().apply();
+                web.evaluateJavascript("window.hangaAlertFailed?.()",null);
             });
         }
 
@@ -280,7 +266,6 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void stopAlerts() {
             if (getPackageName().endsWith(".demo")) return;
             runOnUiThread(() -> {
-                pendingAlerts = null;
                 getSharedPreferences(AlertsJob.STORAGE,MODE_PRIVATE).edit().clear().apply();
                 getSystemService(JobScheduler.class).cancel(AlertsJob.JOB_ID);
                 getSystemService(NotificationManager.class).cancelAll();

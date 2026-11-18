@@ -51,11 +51,8 @@ const copy = {
   eventTemplates:["Förslag att publicera","Starter meetup drafts"],
   templateDate:["Välj datum, tid och exakt mötesplats innan publicering.","Choose a date, time and exact meeting point before publishing."],
   reports:["Anmälningar","Reports"], resolve:["Markera behandlad","Mark resolved"], resolved:["Behandlad","Resolved"],
-  alertsOn:["Aktivera Android-aviseringar","Enable Android notifications"], alertsOff:["Stäng av Android-aviseringar","Disable Android notifications"],
-  alertsDenied:["Tillåt aviseringar i Android-inställningarna.","Allow notifications in Android settings."],
   checkUpdates:["Sök efter uppdatering","Check for updates"],
   accountMenu:["Kontomeny","Account menu"],
-  localAlertsNote:["Nya träffar i ditt sparade område ingår när Android-aviseringar är aktiverade.","Android notifications include new meetups in your saved area."],
   discover:["Upptäck","Discover"], plans:["Mina planer","My plans"], create:["Skapa","Create"],
   messages:["Meddelanden","Messages"], profile:["Mitt konto","My account"], admin:["Adminpanel","Admin panel"],
   notices:["Aviseringar","Notifications"], login:["Logga in","Log in"], register:["Skapa konto","Sign up"],
@@ -268,10 +265,33 @@ window.hangaRefreshReminders=async ()=>{
     if (scope===reminderScope() && ["loginRequired","blocked"].includes(error.message)) session();
   }
 };
+let alertSetup;
 function syncAlertProfile() {
-  if (!demo && user) window.HangaAndroid?.syncAlertProfile?.(
-    localStorage.hangaAlertToken||"",String(user.id),user.area||"",lang);
+  const android=window.HangaAndroid;
+  const scope=reminderScope();
+  if (demo || !scope || !base || !android?.notificationsEnabled?.()) return;
+  const existing=localStorage.hangaAlertToken||"";
+  if (android.alertsScheduled(existing)) {
+    android.syncAlertProfile(existing,String(user.id),user.area||"",lang);
+    return;
+  }
+  if (alertSetup) return;
+  alertSetup=(async()=>{
+    const currentEvents=await api("/events");
+    if (scope!==reminderScope() || !android.notificationsEnabled()) return;
+    const latest=currentEvents.reduce((max,event)=>Math.max(max,Number(event.id)),0);
+    const registration=await api("/alerts/on",{});
+    if (scope!==reminderScope()) return;
+    localStorage.hangaAlertToken=registration.token;
+    android.startAlerts(base,registration.token,String(registration.cursor),lang,String(user.id),user.area||"",String(latest));
+  })().catch(error=>{
+    if (scope===reminderScope()) status(error.message);
+  }).finally(()=>{
+    alertSetup=undefined;
+    if (scope!==reminderScope()) syncAlertProfile();
+  });
 }
+window.hangaSyncAlerts=syncAlertProfile;
 function session(result) {
   token=result?.token || "";
   user=result?.user || null;
@@ -279,7 +299,7 @@ function session(result) {
     if (token) localStorage.hangaDemoToken=token;
     else localStorage.removeItem("hangaDemoToken");
   } else if (!token) hangaCloud.forget();
-  if (!user) syncReminders([]);
+  if (!user) { syncReminders([]); void disableAlerts(); }
   else syncAlertProfile();
 }
 async function disableAlerts() {
@@ -291,7 +311,6 @@ async function disableAlerts() {
     try { await api("/alerts/off",{token:pushToken}); } catch {}
   }
 }
-window.hangaAlertDenied=()=>status("alertsDenied");
 window.hangaAlertFailed=()=>{ disableAlerts(); status("alertsFailed"); };
 function seed() {
   const data = JSON.parse(localStorage.demoData || "null");
@@ -661,7 +680,7 @@ function reminderForm(event) {
     ${field("reminderMinutes","minutes",minutes||DEFAULT_REMINDER_MINUTES,"number",'required min="1" max="10080" step="1"')}
     <label class="check"><input type="checkbox" name="off" ${minutes===0?"checked":""}> ${t("reminderOff")}</label>
     <div class="actions"><button class="primary" type="submit">${t("save")}</button>
-      ${window.HangaAndroid?action(t("allowReminder"),"data-allow-reminder"):""}
+      ${window.HangaAndroid && !window.HangaAndroid.notificationsEnabled()?action(t("allowReminder"),"data-allow-reminder"):""}
       ${window.HangaAndroid?.preciseReminderAccessNeeded()?action(t("preciseReminder"),"data-precise-reminder"):""}
     </div></form>`;
 }
@@ -737,8 +756,6 @@ function profilePage() {
         ${action(t("passwordLabel"),'data-account-section="profile-password"')}
         ${blockedPeople.length?action(t("blockedPeople"),'data-account-section="profile-blocked"'):""}
         ${base?action(t("deleteAccount"),'data-account-section="profile-delete"',"danger"):""}
-        ${!demo&&window.HangaAndroid?`${action(t("alertsOn"),"data-alerts-on")}${action(t("alertsOff"),"data-alerts-off")}
-          <small class="muted">${t("localAlertsNote")}</small>`:""}
         ${action(t("logout"),"data-logout")}
       </div>
     </details></div>
@@ -849,7 +866,6 @@ document.addEventListener("submit",async event=>{
       if (!Number.isInteger(minutes) || minutes<0 || minutes>10080) throw new Error("invalid");
       localStorage.setItem(reminderKey(e.id),String(minutes));
       syncReminders();
-      if (minutes>0 && window.HangaAndroid) window.HangaAndroid.requestReminderPermission();
     } else if (mode==="event") {
       const original=events.find(entry=>entry.id===Number(form.dataset.id));
       data.start=original && localDate(new Date(original.start))===data.start ? original.start : stockholmDate(data.start);
@@ -1009,16 +1025,6 @@ document.addEventListener("click",async event=>{
       else if (navigator.share) await navigator.share({text:invite});
       else throw new Error("shareFailed");
       return;
-    } else if ("alertsOn" in d) {
-      await disableAlerts();
-      const currentEvents=await api("/events");
-      const latest=currentEvents.reduce((max,event)=>Math.max(max,Number(event.id)),0);
-      const registration=await api("/alerts/on",{});
-      localStorage.hangaAlertToken=registration.token;
-      const {url}=hangaCloud.configuration;
-      window.HangaAndroid.startAlerts(url,registration.token,String(registration.cursor),lang,String(user.id),user.area||"",String(latest));
-    } else if ("alertsOff" in d) {
-      await disableAlerts();
     } else if (d.blockPerson) {
       await api("/blocks/change",{id:Number(d.blockPerson),enabled:d.value==="true"});
     } else if (d.resolve) {
@@ -1048,9 +1054,6 @@ document.addEventListener("click",async event=>{
         if ($("participants")) $("participants").innerHTML=result.length?result.map(person=>
           `<div class="card"><p>${memberLink(person.id,person.name)}</p>${person.id!==user.id&&canMessage?link("message",`#event/${d.event}/${Number(person.id)}`):""}${safetyActions(person.id,"person",person.id)}</div>`).join(""):`<p>${t("waiting")}</p>`;
         return;
-      }
-      if (d.event && d.op==="join" && value && window.HangaAndroid) {
-        window.HangaAndroid.requestReminderPermission();
       }
       status("done");
     }
