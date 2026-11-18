@@ -107,13 +107,16 @@ async function eventList(db, me) {
 }
 
 async function messages(db,id,chat=false) {
-  const [sent,received,blocked,blocking] = await Promise.all([
+  const [sent,received,blocked,blocking,deleted,hidden] = await Promise.all([
     db.query("messages",[eq("sender",id)],descending,chat?undefined:150),
     db.query("messages",[eq("recipient",id)],descending,chat?undefined:150),
-    db.query("blocks",[eq("blocker",id)]),db.query("blocks",[eq("blocked",id)])
+    db.query("blocks",[eq("blocker",id)]),db.query("blocks",[eq("blocked",id)]),
+    db.query("chat_reads",[eq("owner",id)]),db.query("chat_hidden",[eq("owner",id)])
   ]);
   const denied = new Set([...blocked.map(b=>b.blocked),...blocking.map(b=>b.blocker)]);
-  const sorted = [...sent,...received].sort(sortNewest);
+  const cutoffs=new Map(deleted.map(row=>[row.peer,row.deletedThrough||0]));
+  const hiddenIds=new Set(hidden.map(row=>row.message_id));
+  const sorted = [...sent,...received].filter(m=>m.id>(cutoffs.get(m.sender===id?m.recipient:m.sender)||0)&&!hiddenIds.has(m.id)).sort(sortNewest);
   const items = chat?sorted:sorted.slice(0,150);
   const people = await db.getMany("profiles",items.flatMap(m=>[m.sender,m.recipient]));
   const events = await db.getMany("events",items.map(m=>m.event_id));
@@ -121,7 +124,7 @@ async function messages(db,id,chat=false) {
     const sender = people.get(String(m.sender));
     const recipient = people.get(String(m.recipient));
     const event = events.get(String(m.event_id));
-    if (!sender || !recipient || sender.deleted || recipient.deleted || (chat && (sender.blocked || recipient.blocked)) || !event || denied.has(m.sender) || denied.has(m.recipient)) return [];
+    if (!sender || !recipient || sender.deleted || recipient.deleted || (chat && (sender.blocked || recipient.blocked)) || denied.has(m.sender) || denied.has(m.recipient)) return [];
     return [{...m,title:m.title||event?.title||"",sender_name:sender.name,recipient_name:recipient.name}];
   });
 }
@@ -138,16 +141,17 @@ export async function action(db, name, p, identity, env) {
     const after = integer(p.after_id,0);
     const alerts = await db.query("notices",[byRecipient(user.id),["id","GREATER_THAN",after]],ascending,50);
     const events=await db.getMany("events",alerts.map(row=>row.event_id));
-    const legacy=await db.getMany("messages",alerts.filter(a=>a.kind==="message"&&!a.sender_id).map(a=>a.id-1));
-    const senders=[...new Set(alerts.filter(a=>a.kind==="message").map(a=>a.sender_id||legacy.get(String(a.id-1))?.sender).filter(Boolean))];
+    const legacy=await db.getMany("messages",alerts.filter(a=>a.kind==="message").map(a=>a.message_id||a.id-1));
+    const senders=[...new Set(alerts.filter(a=>a.kind==="message").map(a=>a.sender_id||legacy.get(String(a.message_id||a.id-1))?.sender).filter(Boolean))];
     const [people,blocks]=await Promise.all([
       db.getMany("profiles",senders),db.getMany("blocks",senders.flatMap(sender=>[planKey(user.id,sender),planKey(sender,user.id)]))
     ]);
-    return alerts.map(({id,kind,event_id,title,sender_id})=>{
+    const visibleMessages=new Set((await messages(db,user.id,true)).map(m=>m.id));
+    return alerts.map(({id,kind,event_id,title,sender_id,message_id})=>{
       if (kind==="message") {
-        const sender=sender_id||legacy.get(String(id-1))?.sender;
+        const sender=sender_id||legacy.get(String(message_id||id-1))?.sender;
         const profile=people.get(String(sender));
-        if (events.has(String(event_id)) && profile && !profile.deleted && !profile.blocked && !blocks.has(planKey(user.id,sender)) && !blocks.has(planKey(sender,user.id))) {
+        if (visibleMessages.has(message_id||id-1) && profile && !profile.deleted && !profile.blocked && !blocks.has(planKey(user.id,sender)) && !blocks.has(planKey(sender,user.id))) {
           return {id,kind,event_id,title:profile.name,sender_id:sender};
         }
         return {id,kind:"message_skipped",event_id,title};
@@ -212,7 +216,19 @@ export async function action(db, name, p, identity, env) {
     if (!message || message.sender!==peer || message.recipient!==uid) fail("missing");
     const key=planKey(uid,peer);
     const existing=await db.get("chat_reads",key);
-    if ((existing?.through||0)<through) db.put("chat_reads",key,{owner:uid,peer,through});
+    if ((existing?.through||0)<through) db.put("chat_reads",key,{...existing,owner:uid,peer,through});
+    return {};
+  }
+  if(name==="chat_delete") {
+    const peer=integer(p.peer);
+    const id=integer(p.message??p.through);
+    const message=await db.get("messages",id);
+    if(!message||!((message.sender===uid&&message.recipient===peer)||(message.sender===peer&&message.recipient===uid))) fail("missing");
+    if(p.message!==undefined) db.put("chat_hidden",planKey(uid,id),{owner:uid,peer,message_id:id});
+    else {
+      const key=planKey(uid,peer),existing=await db.get("chat_reads",key);
+      db.put("chat_reads",key,{...existing,owner:uid,peer,through:Math.max(existing?.through||0,id),deletedThrough:Math.max(existing?.deletedThrough||0,id)});
+    }
     return {};
   }
   if (name==="chat_send") {
@@ -231,8 +247,9 @@ export async function action(db, name, p, identity, env) {
   }
   if (name==="notices") {
     const rows=await readNotices(db,uid);
+    const visibleMessages=new Set((await messages(db,uid,true)).map(m=>m.id));
     const events=await db.getMany("events",rows.map(row=>row.event_id));
-    return rows.filter(row=>row.kind==="cancelled" || events.has(String(row.event_id))).map(({recipients,...row})=>row);
+    return rows.filter(row=>row.kind==="message"?visibleMessages.has(row.message_id||row.id-1):row.kind==="cancelled" || events.has(String(row.event_id))).map(({recipients,...row})=>row);
   }
   if (name==="alerts_on") {
     const cursor = (await db.query("notices",[byRecipient(uid)],descending,1))[0]?.id||0;
@@ -302,12 +319,14 @@ export async function action(db, name, p, identity, env) {
       ]);
       const additional=await Promise.all([
         db.query("follows",[eq("follower",target.id)]),db.query("follows",[eq("organizer",target.id)]),
-        db.query("feedback",[eq("user_id",target.id)]),db.query("group_messages",[eq("sender",target.id)])
+        db.query("feedback",[eq("user_id",target.id)]),db.query("group_messages",[eq("sender",target.id)]),
+        db.query("chat_hidden",[eq("owner",target.id)]),db.query("chat_hidden",[eq("peer",target.id)])
       ]);
       db.remove("availability",target.id);
       for(const row of [...additional[0],...additional[1]]) db.remove("follows",planKey(row.follower,row.organizer));
       for(const row of additional[2]) db.remove("feedback",planKey(row.event_id,row.user_id));
       for(const row of additional[3]) db.remove("group_messages",row.id);
+      for(const row of [...additional[4],...additional[5]]) db.remove("chat_hidden",planKey(row.owner,row.message_id));
       for (const m of [...sent,...received]) db.remove("messages",m.id);
       for (const marker of [...readBy,...readAbout]) db.remove("chat_reads",planKey(marker.owner,marker.peer));
       for (const e of owned) db.remove("events",e.id);
@@ -504,6 +523,6 @@ async function writeMessage(db,me,recipient,event_id,title,value) {
   const msg=await nextIds(db,2);
   const created=now();
   db.put("messages",msg,{id:msg,event_id,title,sender:me.id,recipient,body,created});
-  db.put("notices",msg+1,{id:msg+1,event_id,kind:"message",sender_id:me.id,name:me.name,title:title||me.name,created,recipients:[recipient]});
+  db.put("notices",msg+1,{id:msg+1,event_id,message_id:msg,kind:"message",sender_id:me.id,name:me.name,title:title||me.name,created,recipients:[recipient]});
   return {pushChat:{owner:recipient,peer:me.id,notice:msg+1}};
 }

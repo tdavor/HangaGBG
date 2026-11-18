@@ -42,3 +42,15 @@ test('recurrence, meeting fields, following and private feedback have Swedish an
   run('session()');
   assert.equal(run('groupRows.length+followingPeople.length+availability.length'),0);
 });
+
+test('private conversation exposes personal message and history deletion with explanatory copy',()=>{
+  const run=ui();
+  run(`messageList=[{id:100,event_id:10,sender:2,recipient:1,sender_name:'Anna',recipient_name:'Davor',body:'Hello',created:new Date().toISOString()}]`);
+  for(const lang of ['sv','en']) {
+    const html=run(`lang='${lang}';chatContent(2)`);
+    assert.match(html,/data-delete-chat="2" data-through="100"/);
+    assert.match(html,/data-delete-message="100" data-peer="2"/);
+    assert.ok(run('t("deleteConversationConfirm")').length>60);
+    assert.ok(run('t("deleteMessageConfirm")').length>30);
+  }
+});

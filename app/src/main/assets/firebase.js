@@ -167,7 +167,7 @@ const hangaCloud = (() => {
     }
     const routes={"/availability":data?"availability_save":"availability_list","/follows":data?"follow_change":"follow_list",
       "/groups":"group_messages","/groups/send":"group_send","/attendance":"attendance","/feedback":data?.save?"feedback_save":"feedback_get",
-      "/events":data?"create":"events","/me":"me","/messages":"messages","/chats":"chat_inbox","/chats/read":"chat_read","/chats/send":"chat_send","/notices":"notices",
+      "/events":data?"create":"events","/me":"me","/messages":"messages","/chats":"chat_inbox","/chats/read":"chat_read","/chats/delete":"chat_delete","/chats/send":"chat_send","/notices":"notices",
       "/admin":"admin","/admin/settings":"admin_settings","/report":"report","/blocks":"block_list",
       "/blocks/change":"block_person","/reports/resolve":"resolve_report","/push/register":"push_register","/alerts/on":"alerts_on","/alerts/off":"alerts_off"};
     if (routes[path]) return rpc(routes[path],data||{},access);

@@ -46,8 +46,8 @@ async function deleteAuth(env,token,uid,idToken) {
   if (!response.ok && (await response.json()).error?.message!=="USER_NOT_FOUND") throw new Error("authDeletion");
 }
 
-async function removeEventRelations(db,id) {
-  for (const collection of ["plans","messages","group_messages","feedback"]) {
+export async function removeEventRelations(db,id) {
+  for (const collection of ["plans","group_messages","feedback"]) {
     while (true) {
       const rows=await db.query(collection,[["event_id","EQUAL",id]],null,200);
       if (!rows.length) break;

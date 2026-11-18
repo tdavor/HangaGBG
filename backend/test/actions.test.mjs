@@ -283,3 +283,52 @@ test("scheduled prompt batches skip completed meetups and resume at the next one
   assert.equal(next.length,3);
   assert.ok(next.every(row=>!first.some(done=>done.id===row.id)));
 });
+
+test("private history and message alerts survive permanent event cleanup",async()=>{
+  const {removeEventRelations}=await import('../index.mjs');
+  const {db,call,id,people}=await app();
+  const device=await call('alerts_on',{},1);
+  await call('join',{id,enabled:true},1);
+  await call('message',{id,recipient:people[1].id,body:'Keep this conversation'});
+  const [before]=await call('chat_inbox',{},1);
+  await call('delete_event',{id});
+  db.writes=new Map();db.send=async()=>({});
+  await removeEventRelations(db,id);
+  assert.equal(await db.get('events',id),undefined);
+  assert.equal((await call('chat_inbox',{},1))[0].body,before.body);
+  assert.equal((await call('messages'))[0].body,before.body);
+  assert.ok((await call('notices',{},1)).some(n=>n.kind==='message'));
+  assert.ok((await call('poll',{token:device.token,after_id:device.cursor},null)).some(n=>n.kind==='message'));
+  await call('chat_read',{peer:people[0].id,through:before.id},1);
+  assert.equal((await call('chat_inbox',{},1))[0].unread,false);
+  // Retaining history does not bypass the shared-meetup requirement for new messages.
+  await assert.rejects(call('chat_send',{peer:people[0].id,body:'After event deletion'},1),{message:'forbidden'});
+});
+
+test("message and conversation deletion affect only the caller and never hide later messages",async()=>{
+  const {call,id,people,db}=await app();
+  const [host,guest]=people;
+  const device=await call('alerts_on',{},1);
+  await call('join',{id,enabled:true},1);
+  await call('message',{id,recipient:guest.id,body:'First'});
+  const [first]=await call('chat_inbox',{},1);
+  await assert.rejects(call('chat_delete',{peer:host.id,message:first.id},2),{message:'missing'});
+  await assert.rejects(call('chat_delete',{peer:people[2].id,message:first.id},1),{message:'missing'});
+  await call('chat_delete',{peer:host.id,message:first.id},1);
+  assert.deepEqual(await call('chat_inbox',{},1),[]);
+  assert.equal((await call('chat_inbox')).length,1);
+  assert.ok(await db.get('messages',first.id));
+  assert.ok((await call('poll',{token:device.token,after_id:device.cursor},null)).every(n=>n.kind!=='message'));
+  await call('chat_send',{peer:host.id,body:'Reply'},1);
+  const [reply]=await call('chat_inbox',{},1);
+  await call('chat_delete',{peer:host.id,through:reply.id},1);
+  assert.deepEqual(await call('chat_inbox',{},1),[]);
+  assert.equal((await call('chat_inbox')).length,2);
+  await call('chat_send',{peer:guest.id,body:'New message'});
+  const [latest]=await call('chat_inbox',{},1);
+  assert.equal(latest.body,'New message');assert.equal(latest.unread,true);
+  await call('chat_read',{peer:host.id,through:latest.id},1);
+  assert.equal((await call('chat_inbox',{},1)).length,1);
+  assert.equal((await call('chat_inbox',{},1))[0].unread,false);
+  assert.equal((await call('notices',{},1)).filter(n=>n.kind==='message').length,1);
+});

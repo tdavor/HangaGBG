@@ -1,6 +1,11 @@
 "use strict";
 
 const copy = {
+  deleteConversation:["Radera konversation","Delete conversation"], deleteMessage:["Radera för mig","Delete for me"],
+  deleteConversationConfirm:["Radera tidigare meddelanden i den här konversationen för dig? Den andra personen behåller sin historik. Nya meddelanden kan visas igen.","Delete the current conversation history for you? The other person keeps their history. New messages can appear again."],
+  deleteMessageConfirm:["Radera meddelandet för dig? Det finns kvar hos den andra personen.","Delete this message for you? It remains visible to the other person."],
+  retainedChatHelp:["Din historik finns kvar även om träffen raderas. För att skicka nya meddelanden behöver ni fortfarande delta i samma träff.","Your history stays even if the meetup is deleted. Sending new messages still requires a shared meetup."],
+
   todayCompany:["Sällskap idag","Company today"], availableToday:["Jag vill ses idag","I'm available today"], viewAvailability:["Visa alla tillgängliga","View everyone available"],
   availabilityTime:["Tillgänglig från","Available from"], availableUntil:["Till","Until"],
   removeAvailability:["Ta bort min tillgänglighet","Remove my availability"],
@@ -404,6 +409,12 @@ function demoApi(path, body) {
   } else if (path==="/events") {
     data.events.push({...body,id:data.next++,owner:1,organizer:data.user.name,count:0,joined:0,saved:0});
   } else if (path==="/messages") result=(data.messages||[]).filter(m=>!(data.blocks||[]).includes(m.recipient)).slice().reverse();
+  else if (path==="/chats/delete") {
+    const selected=(data.messages||[]).find(m=>m.id===(body.message||body.through));
+    if(!selected || ![selected.sender,selected.recipient].includes(body.peer)) throw new Error("missing");
+    data.messages=(data.messages||[]).filter(m=>body.message?m.id!==body.message:
+      !((m.sender===body.peer||m.recipient===body.peer)&&m.id<=body.through));
+  }
   else if (path==="/notices") result=(data.notices||[]).slice().reverse();
   else if (path==="/blocks") result=(data.blocks||[]).map(id=>({id,name:"Hänga Gbg"}));
   else if (path==="/blocks/change") {
@@ -993,11 +1004,11 @@ function chatContent(peer) {
     if (previous?.sender===message.sender) previous.items.push(message);
     else groups.push({sender:message.sender,items:[message]});
   }
-  return `<h2>${memberLink(peer,thread.name)}</h2><div class="card chat-timeline">${groups.map(({sender,items})=>`
+  return `<div class="rows between"><h2>${memberLink(peer,thread.name)}</h2>${action(t("deleteConversation"),`data-delete-chat="${peer}" data-through="${Number(thread.items[0].id)}"`,"danger")}</div><p class="muted">${t("retainedChatHelp")}</p><div class="card chat-timeline">${groups.map(({sender,items})=>`
     <section class="chat-group ${sender===user.id?"chat-own":""}">
       <strong>${esc(sender===user.id?user.name:thread.name)}</strong>
       ${items.map(m=>`<div class="chat-entry"><p>${esc(m.body)}</p><small class="muted">${esc(dateLabel(m.created))}</small>
-        ${sender===peer?link("reportMessage",`#report/message/${Number(m.id)}`):""}</div>`).join("")}</section>`).join("")}
+        ${sender===peer?link("reportMessage",`#report/message/${Number(m.id)}`):""}${action(t("deleteMessage"),`data-delete-message="${Number(m.id)}" data-peer="${peer}"`)}</div>`).join("")}</section>`).join("")}
     </div>${safetyActions(peer,"person",peer)}`;
 }
 function scrollChatToLatest() {
@@ -1295,7 +1306,14 @@ document.addEventListener("click",async event=>{
   }
   button.disabled=true;
   try {
-    if(d.follow) {
+    if(d.deleteChat||d.deleteMessage) {
+      if(!confirm(t(d.deleteChat?"deleteConversationConfirm":"deleteMessageConfirm"))) return;
+      // Finish an older refresh before applying the deletion so it cannot restore stale history.
+      if(chatsRequest) await chatsRequest;
+      await api("/chats/delete",d.deleteChat?{peer:Number(d.deleteChat),through:Number(d.through)}:{peer:Number(d.peer),message:Number(d.deleteMessage)});
+      await refreshChats();
+      return;
+    } else if(d.follow) {
       await api("/follows",{id:Number(d.follow),enabled:d.enabled==="true"});
     } else if("removeAvailability" in d) {
       await api("/availability",{enabled:false});

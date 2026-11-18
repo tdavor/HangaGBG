@@ -1,4 +1,4 @@
-# Hänga Gbg 1.5.0 · Android
+# Hänga Gbg 1.5.1 · Android
 
 [**Ladda ner / Download Hänga Gbg för Android (.apk)**](https://github.com/tdavor/HangaGBG/releases/latest/download/HangaGBG.apk)
 
@@ -30,3 +30,6 @@ A coffee, a walk, or a visit to an exhibition can be a simple first step towards
 Deploy the Worker using the repository's existing Cloudflare deployment. Both Wrangler configurations include a 15-minute Cron Trigger for attendance and feedback notifications (up to four meetups per invocation, with unfinished work picked up by the next run). Existing Firebase service credentials remain in Cloudflare secrets; no new secret or public Firestore access is needed. Group and community notices use the existing Android background alert polling; private chat keeps its FCM delivery. The offline demo hides community features that require an account and backend.
 
 Validation: `node --test backend/test/*.mjs`. GitHub Actions builds the Android APKs for pull requests; the existing tagged-release workflow publishes signed APKs.
+
+
+Private chat history survives meetup deletion. Each member can delete a message or the current conversation history for themselves; the other member's copy is unchanged. New messages after a conversation deletion appear normally. New messages still require a shared meetup and respect blocks. Messages already physically removed by older Worker deployments are not restored by this change.
