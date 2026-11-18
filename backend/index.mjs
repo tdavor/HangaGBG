@@ -1,9 +1,10 @@
 import {Store,googleToken} from "./firestore.mjs";
 import {action,reads} from "./actions.mjs";
 import {sendWelcome} from "./welcome.mjs";
+import {cityCalendar} from "./city-events.mjs";
 
 const headers = {"Content-Type":"application/json","Cache-Control":"no-store",
-  "Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"POST, OPTIONS",
+  "Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET, POST, OPTIONS",
   "Access-Control-Allow-Headers":"Authorization, Content-Type"};
 const reply = (body,status=200) => new Response(JSON.stringify(body),{status,headers});
 const errors = new Set(["invalid","loginRequired","blocked","forbidden","missing","past","full","reauth","adult",
@@ -59,6 +60,10 @@ export default {
   async fetch(request,env,ctx) {
     if (request.method==="OPTIONS") return new Response(null,{status:204,headers});
     const path=new URL(request.url).pathname;
+    if (request.method==="GET" && path==="/city-events") {
+      try { return await cityCalendar(request,ctx,headers); }
+      catch { return reply({error:"server"},503); }
+    }
     if (request.method!=="POST" || !["/rpc","/alerts"].includes(path)) return reply({error:"missing"},404);
     try {
       if (Number(request.headers.get("Content-Length"))>16384) throw new Error("invalid");

@@ -1,6 +1,15 @@
 "use strict";
 
 const copy = {
+  cityCalendar:["Göteborgs Stad","City of Gothenburg"],
+  cityCalendarUnavailable:["Stadens kalendarium är tillfälligt otillgängligt.","The city calendar is temporarily unavailable."],
+  eventSource:["Visa träffar från","Show events from"],
+  communityEvents:["Hänga Gbg","Hänga Gbg"],
+  arrangeCityMeetup:["Ordna en träff","Arrange a meetup"],
+  cityMeetups:["Träffar för evenemanget","Meetups for this event"],
+  cityMeetupHelp:["Välj tid och mötesplats. Efter publicering kan du bjuda in andra och skriva till deltagare i Hänga Gbg. Kontrollera eventuell bokning på Göteborgs Stads webbplats.","Choose a time and meeting point. After publishing, invite others and message participants in Hänga Gbg. Check any booking requirements on the city website."],
+  cityShare:["Dela / bjud in","Share / invite"],
+  cityInvite:["Vill du följa med?","Want to come along?"],
   preferences:["Inställningar","Settings"], interfaceLanguage:["Appens språk","App language"],
   contact:["Kontakta Hänga Gbg","Contact Hänga Gbg"], expired:["Avslutade träffar","Past meetups"],
   repeat:["Skapa en ny träff från denna","Repeat this meetup"], deleteEvent:["Ta bort träffen","Delete meetup"],
@@ -135,7 +144,42 @@ let token = demo ? localStorage.hangaDemoToken || "" : hangaCloud.signedIn ? "fi
 let pendingEmail = "";
 let blockedPeople=[];
 let user = null, events = [], messageList = [], noticeList = [], admin = null;
-const defaultFilters = { query:"", area:"", category:"", period:"upcoming" };
+let cityItems = [], cityRequest, cityLoadedAt = 0, cityUnavailable = false;
+const cityId = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
+const cityPortal = "https://goteborg.se/wps/portal/kalendarium/kalendarium-start?activityId=";
+function validCityEvent(item) {
+  return item && cityId.test(item.id) && item.source===cityPortal+item.id
+    && [item.title,item.place,item.organizer].every(value=>typeof value==="string")
+    && Number.isFinite(Date.parse(item.start)) && Date.parse(item.end)>=Date.parse(item.start);
+}
+
+function loadCityCalendar() {
+  if (demo || !base || Date.now()-cityLoadedAt<(cityUnavailable?60000:600000)) return;
+  if (cityRequest) return cityRequest;
+  const origin=base;
+  cityRequest=(async()=>{
+    try {
+      const response=await fetch(origin+"/city-events",{redirect:"error",credentials:"omit",signal:AbortSignal.timeout(15000)});
+      if (!response.ok) throw new Error("cityCalendarUnavailable");
+      const items=await response.json();
+      if (!Array.isArray(items)) throw new Error("cityCalendarUnavailable");
+      if (origin===base) {
+        cityItems=items.filter(validCityEvent).map(item=>({...item,city:true,area:"Göteborg",category:"other"}));
+        cityLoadedAt=Date.now();
+        cityUnavailable=false;
+      }
+    } catch {
+      if (origin===base) {
+        cityUnavailable=true;
+        cityLoadedAt=Date.now();
+      }
+    }
+  })().finally(()=>{cityRequest=undefined;});
+  return cityRequest;
+}
+const findCity = id => cityItems.find(event=>event.id===id && !isPast(event));
+
+const defaultFilters = { query:"", area:"", category:"", period:"upcoming", eventSource:"" };
 let filters = {...defaultFilters};
 let renderedResults;
 const PAGE_SIZE = 5;
@@ -342,25 +386,34 @@ function demoApi(path, body) {
 }
 async function load() {
   const version=++refreshId;
-  const page=route()[0];
+  const [page,detail]=route();
+  const cityLoad=page==="discover"||page==="city"||(page==="create"&&detail==="city")?loadCityCalendar():undefined;
   try {
     if (token && !user) {
-      try { user=await api("/me"); syncAlertProfile(); }
+      try {
+        user=await api("/me");
+        syncAlertProfile();
+        if (version===refreshId && page==="discover") render();
+      }
       catch(error) { if (["loginRequired","blocked"].includes(error.message)) {
         session();
         if (error.message==="blocked") status("blocked");
       } else throw error; }
     }
-    if ((demo || base) && ["discover","plans","event","create","admin"].includes(page)) {
+    if ((demo || base) && ["discover","plans","event","create","admin","city"].includes(page)) {
       const current=await api("/events");
       if (version!==refreshId) return;
       events=current;
       syncReminders();
       if (page==="discover" && $("results")) {
         refreshResults();
+        await cityLoad;
+        if (version===refreshId && $("results")) refreshResults();
         return;
       }
     }
+    await cityLoad;
+    if (version!==refreshId) return;
     if (page==="messages" && user) messageList=await api("/messages");
     if (page==="profile" && user) blockedPeople=await api("/blocks");
     if (page==="notices" && user) noticeList=(await api("/notices")).filter(notice=>notice.kind!=="reminder");
@@ -384,23 +437,25 @@ function hasArea(event,area) {
 function render() {
   const [page,id,recipient]=route();
   document.documentElement.lang=lang;
+  const pages=["discover","plans","create","messages","profile","settings"];
+  if (user?.admin) pages.push("admin");
+  const menuLinks=pages.map(key=>`<a class="action" href="#${key}" ${page===key?'aria-current="page"':""}>${t(key==="settings"?"preferences":key)}</a>`).join("");
   $("header-actions").innerHTML=`<details class="account-menu settings-menu">
-    <summary aria-label="${t("preferences")}" title="${t("preferences")}"><span aria-hidden="true">⚙</span></summary>
-    <div class="account-menu-panel">${link("preferences","#settings")}${link("profile","#profile")}</div>
+    <summary aria-label="${t("accountMenu")}" title="${t("accountMenu")}"><span aria-hidden="true">⚙</span></summary>
+    <nav class="account-menu-panel" aria-label="${t("accountMenu")}">${menuLinks}</nav>
   </details>`;
-  const nav=["discover","plans","create","messages"];
-  if (user?.admin) nav.push("admin");
-  $("nav").innerHTML=nav.map(key=>`<a href="#${key}" ${key===page?'aria-current="page"':""}>${t(key)}</a>`).join("");
   let html;
   if (page==="settings") html=settingsPage();
   else if (page==="discover") html=discoverPage();
   else if (page==="auth") html=authPage(id);
+  else if (page==="city") html=cityPage(findCity(id));
   else if (page==="event") html=eventPage(events.find(item=>item.id===Number(id)),recipient);
   else if (!user) html=`<h1>${t(page)}</h1><p>${t("loginRequired")}</p>${link("login","#auth","primary")}`;
   else if (page==="create") {
     const draft=user.admin&&id==="draft"?starterMeetups[Number(recipient)]:null;
     const repeat=id==="repeat"?events.find(item=>item.id===Number(recipient)&&item.owner===user.id&&isPast(item)):null;
     html=id==="repeat"&&!repeat?`<h1>${t("missing")}</h1>`:
+      id==="city"?(findCity(recipient)?eventForm(null,null,null,findCity(recipient)):`<h1>${t("missing")}</h1>`):
       id==="quick"?quickForm():eventForm(events.find(item=>item.id===Number(id)),draft,repeat);
   }
   else if (page==="report") html=reportPage(id,recipient);
@@ -452,6 +507,7 @@ function discoverPage() {
       <div class="wide">${field("keyword","query",filters.query,"search",`placeholder="${t("search")}"`)}</div>
       ${select("area","area",[["",t("anyArea")],...areas.map(x=>[x,x]),["other",t("other")]],filters.area)}
       ${select("category","category",[["",t("all")],...cats.map(x=>[x,t(x)])],filters.category)}
+      ${demo?"":select("eventSource","eventSource",[["",t("all")],["community",t("communityEvents")],["city",t("cityCalendar")]],filters.eventSource)}
       ${select("events","period",["upcoming","today","tonight"].map(x=>[x,t(x)]),filters.period)}
       <label class="check wide"><input type="checkbox" name="newcomers" ${filters.newcomers?"checked":""}> ${t("newcomers")}</label>
     </form></details>
@@ -471,16 +527,18 @@ function focusEventList() {
 }
 function hasFilters() {
   return Boolean(filters.query.trim() || filters.area || filters.category ||
-    filters.period!=="upcoming" || filters.newcomers);
+    filters.period!=="upcoming" || filters.newcomers || filters.eventSource);
 }
 function results() {
   const term=filters.query.trim().toLowerCase();
   const today=localDate(new Date()).slice(0,10);
-  const matching=events.filter(event=>{
+  const matching=[...events,...cityItems].filter(event=>{
+    if (filters.eventSource && filters.eventSource!==(event.city?"city":"community")) return false;
     const date=localDate(new Date(event.start));
     if (event.hidden || event.cancelled || (filters.newcomers && !event.newcomers) || isPast(event) || !hasArea(event,filters.area)) return false;
     if (filters.category && event.category!==filters.category) return false;
-    if (filters.period!=="upcoming" && !date.startsWith(today)) return false;
+    if (filters.period!=="upcoming" && !date.startsWith(today)
+        && !(event.city && date<today && localDate(new Date(event.end)).slice(0,10)>=today)) return false;
     if (filters.period==="tonight" && date.slice(11,13)<"17") return false;
     const words=[event.title,event.titleEn,event.description,event.area,event.place,t(event.category),
       copy[event.category]?.[0],copy[event.category]?.[1]].filter(Boolean).join(" ").toLowerCase();
@@ -488,18 +546,22 @@ function results() {
   });
   if (!matching.length) {
     eventPageIndex=0;
-    return `<p class="muted">${t("none")}</p>`;
+    return `<p class="muted">${t(cityUnavailable&&filters.eventSource==="city"?"cityCalendarUnavailable":"none")}</p>`;
   }
   if (!hasFilters()) {
-    for (const event of matching) {
+    for (const event of matching.filter(event=>!event.city)) {
       if (!browseOrder.has(event.id)) browseOrder.set(event.id,Math.random());
     }
-    matching.sort((a,b)=>browseOrder.get(a.id)-browseOrder.get(b.id));
+    const community=matching.filter(event=>!event.city).sort((a,b)=>browseOrder.get(a.id)-browseOrder.get(b.id));
+    const municipal=matching.filter(event=>event.city);
+    matching.length=0;
+    while (community.length && municipal.length) matching.push(...community.splice(0,2),municipal.shift());
+    matching.push(...community,...municipal);
   }
   const pageCount=Math.ceil(matching.length/PAGE_SIZE);
   eventPageIndex=Math.max(0,Math.min(eventPageIndex,pageCount-1));
   const start=eventPageIndex*PAGE_SIZE;
-  const page=matching.slice(start,start+PAGE_SIZE).map(event=>card(event)).join("");
+  const page=matching.slice(start,start+PAGE_SIZE).map(event=>event.city?cityCard(event):card(event)).join("");
   if (pageCount===1) return page;
   return page+`<div class="event-pages">
     ${action(t("previous"),`data-event-page="-1" ${eventPageIndex===0?"disabled":""}`)}
@@ -507,7 +569,7 @@ function results() {
     ${action(t("next"),`data-event-page="1" ${eventPageIndex===pageCount-1?"disabled":""}`)}
   </div>`;
 }
-function isPast(event) { return Date.parse(event.start)<=Date.now(); }
+function isPast(event) { return Date.parse(event.city?event.end:event.start)<=Date.now(); }
 function eventTitle(e) { return lang==="en" && e.titleEn ? e.titleEn : e.title; }
 function price(e) { return e.price ? esc(e.price)+" kr" : t("free"); }
 function googleMapsUrl(event) {
@@ -517,6 +579,24 @@ function googleMapsUrl(event) {
 function eventAddress(event) {
   const address=[event.place,event.area].filter(Boolean).join(", ");
   return `<a href="${esc(googleMapsUrl(event))}">${esc(address)}</a>`;
+}
+function cityActions(event) {
+  return `<div class="actions">${action(t("cityShare"),`data-share-city="${esc(event.id)}"`)}
+    ${link("arrangeCityMeetup",user?`#create/city/${esc(event.id)}`:`#auth/login/${esc(event.id)}`,"primary")}</div>`;
+}
+function cityCard(event) {
+  return `<article class="card city-card"><span class="pill">${t("cityCalendar")}</span>
+    <h2><a href="#city/${esc(event.id)}">${esc(event.title)}</a></h2>
+    <p class="muted">${esc(dateLabel(event.start))}${event.place?" · "+esc(event.place):""}</p></article>`;
+}
+function cityPage(event) {
+  if (!event) return `<h1>${t("cityCalendar")}</h1><p>${t(cityUnavailable?"cityCalendarUnavailable":"missing")}</p>`;
+  const meetups=events.filter(e=>e.source===event.source&&!e.hidden&&!e.cancelled&&!isPast(e));
+  return `<span class="pill">${t("cityCalendar")}</span><h1>${esc(event.title)}</h1>
+    <p>${esc(dateLabel(event.start))}${event.end!==event.start?" – "+esc(dateLabel(event.end)):""}</p>
+    ${event.place?`<p>${eventAddress(event)}</p>`:""}${event.organizer?`<p>${esc(event.organizer)}</p>`:""}
+    <div class="actions">${link("source",event.source)}</div>${cityActions(event)}
+    ${meetups.length?`<h2>${t("cityMeetups")}</h2>${meetups.map(e=>card(e)).join("")}`:""}`;
 }
 function card(e,controls="") {
   return `<article class="card"><div class="rows between"><span class="pill">${esc(t(e.category))}</span><span class="pill">${price(e)}</span></div>
@@ -584,16 +664,17 @@ function eventPage(e, recipient) {
     ${manager?`<div class="card"><div class="actions">${e.cancelled?"":link("edit","#create/"+e.id)}${open?command("cancelEvent","cancel",true,"danger"):""}${command("deleteEvent","delete",true,"danger")}
        ${user.admin?command(e.hidden?"show":"hide","moderate",!e.hidden):""}</div></div>`:""}${user&&(manager||e.joined)?`<div class="card">${command("attendees","participants",true)}<div id="participants"></div></div>`:""}${form}${safetyActions(target,recipient?"person":"event",recipient?target:e.id)}`;
 }
-function eventForm(e,draft,repeat) {
-  const values=e||repeat;
+function eventForm(e,draft,repeat,city) {
+  const values=e||repeat|| (city&&{title:city.title,place:city.place,source:city.source,category:"other"});
+  const cityStart=city?new Date(Math.max(Date.parse(city.start),Date.now()+60000)):null;
   if (e && e.owner!==user.id && !user.admin) return `<h1>${t("forbidden")}</h1>`;
-  return `<h1>${t(repeat?"repeat":e?"edit":"create")}</h1>${draft?`<p>${t("templateDate")}</p>`:""}<form data-form="event" data-id="${e?.id ? Number(e.id) : ""}">
+  return `<h1>${t(city?"arrangeCityMeetup":repeat?"repeat":e?"edit":"create")}</h1>${draft?`<p>${t("templateDate")}</p>`:""}${city?`<p>${t("cityMeetupHelp")}</p>`:""}<form data-form="event" data-id="${e?.id ? Number(e.id) : ""}">
     ${field("title","title",values?.title||draft?.title[lang==="en"?1:0],"text",'required maxlength="120"')}
     ${textArea("description","description",values?.description,'maxlength="3000"')}
     <div class="grid">${select("category","category",cats.map(x=>[x,t(x)]),values?.category||draft?.category)}
     ${select("mood","mood",moods.map(x=>[x,x?t(x):"—"]),values?.mood)}</div>
     ${areaSelect(values?.area||draft?.area||user.area)}${field("place","place",values?.place||draft?.place,"text",'required maxlength="180"')}
-    ${field("date","start",draft||repeat?"":localDate(e?new Date(e.start):new Date(Date.now()+86400000)),"datetime-local",'required')}
+    ${field("date","start",draft||repeat?"":localDate(cityStart||(e?new Date(e.start):new Date(Date.now()+86400000))),"datetime-local",'required')}
     <div class="grid">${field("price","price",values?.price??0,"number",'required min="0" max="100000"')}
     ${field("capacity","capacity",values?.capacity??draft?.capacity??6,"number",'required min="1" max="5000"')}</div>
     ${e?.quick?'<input type="hidden" name="quick" value="on">':""}
@@ -694,6 +775,9 @@ document.addEventListener("submit",async event=>{
       await hangaCloud.connect(data.url,data.key.trim());
       if (!hangaCloud.signedIn) session();
       base=hangaCloud.configuration.url;
+      cityItems=[];
+      cityLoadedAt=0;
+      cityUnavailable=false;
       events=[];
       browseOrder.clear();
       eventPageIndex=0;
@@ -709,7 +793,8 @@ document.addEventListener("submit",async event=>{
       }
       session(response);
       pendingEmail="";
-      location.hash="profile";
+      const city=route()[2];
+      location.hash=mode==="login" && cityId.test(city||"")?`create/city/${city}`:"profile";
     } else if (mode==="reset") {
       pendingEmail=data.email.trim().toLowerCase();
       await api("/password/reset",{email:pendingEmail,locale:lang});
@@ -809,8 +894,9 @@ async function deleteMeetup(id) {
 }
 
 document.addEventListener("click",async event=>{
-  if (event.target.closest('#nav a[href="#discover"]') && route()[0]==="discover") {
+  if (event.target.closest('.settings-menu a[href="#discover"]') && route()[0]==="discover") {
     event.preventDefault();
+    event.target.closest("details").open=false;
     window.scrollTo(0,0);
     void load();
     return;
@@ -849,6 +935,7 @@ document.addEventListener("click",async event=>{
     filterForm.elements.area.value=filters.area;
     filterForm.elements.category.value=filters.category;
     filterForm.elements.period.value=filters.period;
+    if (filterForm.elements.eventSource) filterForm.elements.eventSource.value="";
     filterForm.elements.newcomers.checked=false;
     filterForm.closest("details").open=false;
     eventPageIndex=0;
@@ -875,10 +962,11 @@ document.addEventListener("click",async event=>{
     } else if ("preciseReminder" in d) {
       window.HangaAndroid.allowPreciseReminders();
       return;
-    } else if (d.share) {
-      const e=events.find(entry=>entry.id===Number(d.share));
+    } else if (d.share || d.shareCity) {
+      const e=d.shareCity?findCity(d.shareCity):events.find(entry=>entry.id===Number(d.share));
       if (!e) throw new Error("missing");
-      const invite=`Hänga Gbg · ${eventTitle(e)}\n${dateLabel(e.start)} · ${e.place}, ${e.area}\n${e.description||""}`;
+      const invite=e.city?`${t("cityInvite")}\n${e.title}\n${dateLabel(e.start)}${e.place?" · "+e.place:""}\n${e.source}`:
+        `Hänga Gbg · ${eventTitle(e)}\n${dateLabel(e.start)} · ${e.place}, ${e.area}\n${e.description||""}${e.source?"\n"+e.source:""}`;
       if (window.HangaAndroid) window.HangaAndroid.shareText(invite);
       else if (navigator.share) await navigator.share({text:invite});
       else throw new Error("shareFailed");
@@ -940,7 +1028,11 @@ document.addEventListener("change",event=>{
   render();
 });
 setInterval(()=>{
-  if (route()[0]==="discover" && $("results")) refreshResults();
+  if (route()[0]!=="discover" || !$("results")) return;
+  refreshResults();
+  if (document.visibilityState!=="hidden") loadCityCalendar()?.then(()=>{
+    if ($("results")) refreshResults();
+  });
 },30000);
 window.addEventListener("hashchange",()=>{ window.scrollTo(0,0); render(); load(); });
 render();
