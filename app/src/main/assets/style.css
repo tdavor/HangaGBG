@@ -54,3 +54,6 @@ header{z-index:3}
 .availability-list li,.group-entry{overflow-wrap:anywhere}
 input,textarea,select,.grid>*{min-width:0}
 @media(max-width:480px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+.my-availability{margin-top:.75rem;border-top:1px solid var(--line);padding-top:.75rem}
+.my-availability small{display:block;color:var(--muted)}

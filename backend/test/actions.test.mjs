@@ -332,3 +332,21 @@ test("message and conversation deletion affect only the caller and never hide la
   assert.equal((await call('chat_inbox',{},1))[0].unread,false);
   assert.equal((await call('notices',{},1)).filter(n=>n.kind==='message').length,1);
 });
+
+test('availability edits replace the own entry and deletion leaves other members unchanged',async()=>{
+  const {db,call,people}=await app();
+  const from=new Date().toISOString();
+  const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Stockholm',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const {localInstant}=await import('../community.mjs');
+  const next=new Date(Date.parse(date+'T00:00:00Z')+86400000).toISOString().slice(0,10);
+  const until=new Date(localInstant(next+'T00:00:00')).toISOString();
+  const value={area:'Centrum',activity:'fika',from,until};
+  await call('availability_save',value);
+  await call('availability_save',value,1);
+  await call('availability_save',{...value,area:'Tuve',activity:'walk'});
+  assert.equal((await db.query('availability')).length,2);
+  assert.equal((await db.get('availability',people[0].id)).area,'Tuve');
+  await call('availability_save',{enabled:false,user_id:people[1].id});
+  assert.equal(await db.get('availability',people[0].id),undefined);
+  assert.ok(await db.get('availability',people[1].id));
+});
