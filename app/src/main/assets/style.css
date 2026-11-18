@@ -29,3 +29,6 @@ main{padding-bottom:9rem}
 header{z-index:3}
 .settings-menu{margin:0}
 .account-menu summary:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+
+#delete-meetup-dialog{width:min(30rem,calc(100% - 2rem));padding:1.2rem;background:var(--panel);color:inherit;border:1px solid var(--line);border-radius:1rem}
+#delete-meetup-dialog::backdrop{background:#071b18bb}

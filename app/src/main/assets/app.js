@@ -4,6 +4,9 @@ const copy = {
   preferences:["Inställningar","Settings"], interfaceLanguage:["Appens språk","App language"],
   contact:["Kontakta Hänga Gbg","Contact Hänga Gbg"], expired:["Avslutade träffar","Past meetups"],
   repeat:["Skapa en ny träff från denna","Repeat this meetup"], deleteEvent:["Ta bort träffen","Delete meetup"],
+  keepMeetup:["Behåll träffen","Keep meetup"],
+  eventDeleted:["Träffen togs bort.","The meetup was deleted."],
+  eventDeleteIncomplete:["Träffen finns fortfarande kvar. Försök igen eller kontakta support.","The meetup is still listed. Try again or contact support."],
   confirmEventDelete:["Ta bort träffen permanent?","Permanently delete this meetup?"],
   passwordShow:["Visa lösenord","Show password"], passwordHide:["Dölj lösenord","Hide password"],
   alertsFailed:["Det gick inte att starta aviseringar. Försök igen.","Couldn't start notifications. Try again."],
@@ -769,6 +772,42 @@ document.addEventListener("submit",async event=>{
   }
   finally { button.disabled=false; }
 });
+function confirmMeetupDeletion(meetup) {
+  const dialog=$("delete-meetup-dialog");
+  if (dialog.open) return Promise.resolve(false);
+  $("delete-meetup-title").textContent=t("confirmEventDelete");
+  $("delete-meetup-name").textContent=eventTitle(meetup);
+  $("keep-meetup").textContent=t("keepMeetup");
+  $("delete-meetup").textContent=t("deleteEvent");
+  dialog.returnValue="";
+  return new Promise(resolve=>{
+    dialog.addEventListener("close",()=>resolve(dialog.returnValue==="delete"),{once:true});
+    dialog.showModal();
+  });
+}
+$("keep-meetup").addEventListener("click",()=>$("delete-meetup-dialog").close());
+$("delete-meetup").addEventListener("click",()=>$("delete-meetup-dialog").close("delete"));
+
+async function deleteMeetup(id) {
+  const meetup=events.find(event=>event.id===id);
+  if (!meetup) throw new Error("missing");
+  if (!await confirmMeetupDeletion(meetup)) return;
+  try {
+    await api(`/events/${id}/delete`,{});
+  } catch (error) {
+    if (error.message!=="missing") throw error;
+  }
+  events=await api("/events");
+  syncReminders();
+  if (events.some(event=>event.id===id)) {
+    render();
+    throw new Error("eventDeleteIncomplete");
+  }
+  if (route()[0]==="event" && Number(route()[1])===id) location.hash=user.admin?"admin":"plans";
+  else render();
+  status("eventDeleted");
+}
+
 document.addEventListener("click",async event=>{
   if (event.target.closest('#nav a[href="#discover"]') && route()[0]==="discover") {
     event.preventDefault();
@@ -868,7 +907,11 @@ document.addEventListener("click",async event=>{
       try { await disableAlerts(); await api("/logout",{}); }
       finally { session(); location.hash="discover"; }
     } else if (d.event || d.account) {
-      if (d.op==="delete" && !confirm(t(d.event?"confirmEventDelete":"confirmDelete"))) return;
+      if (d.event && d.op==="delete") {
+        await deleteMeetup(Number(d.event));
+        return;
+      }
+      if (d.op==="delete" && !confirm(t("confirmDelete"))) return;
       if (d.op==="cancel" && !confirm(t("confirmCancel"))) return;
       const value=d.value==="true";
       const result=await api(d.event?`/events/${d.event}/${d.op}`:`/admin/users/${d.account}/${d.op}`,
@@ -883,7 +926,6 @@ document.addEventListener("click",async event=>{
       if (d.event && d.op==="join" && value && window.HangaAndroid) {
         window.HangaAndroid.requestReminderPermission();
       }
-      if (d.event && d.op==="delete") location.hash=user.admin?"admin":"plans";
       status("done");
     }
     await load();

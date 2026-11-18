@@ -76,7 +76,7 @@ export default {
       const db=new Store(env.FIREBASE_PROJECT,token);
       if (name==="health") {
         await db.get("settings","app");
-        return reply({service:"Hanga Gbg Firebase",version:1,apiKey:env.FIREBASE_API_KEY});
+        return reply({service:"Hanga Gbg Firebase",version:1,eventDeletion:"permanent",apiKey:env.FIREBASE_API_KEY});
       }
       const result=await db.run(store=>action(store,name,p,caller,env),!reads.has(name));
       if (result.deleteAuth) {
