@@ -24,7 +24,12 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Build and verify APKs
+        env:
+          FIREBASE_CLIENT_CONFIG: ${{ secrets.HANGA_GOOGLE_SERVICES_JSON }}
         run: |
+          if [[ -n "$FIREBASE_CLIENT_CONFIG" ]]; then
+            printf '%s' "$FIREBASE_CLIENT_CONFIG" > app/google-services.json
+          fi
           bash scripts/build-apk.sh firebase
           bash scripts/build-apk.sh demo
       - uses: actions/upload-artifact@v4

@@ -236,6 +236,15 @@ export async function action(db, name, p, identity, env) {
     db.put("devices",id,{id,user_id:uid,expires:Date.now()+30*86400000});
     return {token,cursor};
   }
+  if (name==="push_register") {
+    if (typeof p.deviceToken!=="string" || !/^[a-f0-9-]{72}$/.test(p.deviceToken)
+        || typeof p.fcmToken!=="string" || !/^[A-Za-z0-9:_-]{20,4096}$/.test(p.fcmToken)) fail("invalid");
+    const key=await sha(p.deviceToken);
+    const device=await db.get("devices",key);
+    if (!device || device.user_id!==uid || device.expires<=Date.now()) fail("missing");
+    if (device.fcmToken!==p.fcmToken) db.put("devices",key,{...device,fcmToken:p.fcmToken});
+    return {};
+  }
   if (name==="alerts_off") {
     if (!/^[a-f0-9-]{72}$/.test(p.token||"")) return {};
     const key = await sha(p.token);
@@ -467,5 +476,5 @@ async function writeMessage(db,me,recipient,event_id,title,value) {
   const created=now();
   db.put("messages",msg,{id:msg,event_id,title,sender:me.id,recipient,body,created});
   db.put("notices",msg+1,{id:msg+1,event_id,kind:"message",sender_id:me.id,name:me.name,title:title||me.name,created,recipients:[recipient]});
-  return {};
+  return {pushChat:{owner:recipient,peer:me.id,notice:msg+1}};
 }

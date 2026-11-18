@@ -171,3 +171,15 @@ test("private chat unread markers belong to the recipient and notifications iden
   assert.deepEqual(await call("chat_inbox",{},1),[]);
   assert.ok((await call("poll",{token:device.token,after_id:device.cursor},null)).every(a=>a.kind!=="message"));
 });
+
+test("FCM registration can only update the signed-in user's own device",async()=>{
+  const {call,db,people}=await app();
+  const device=await call("alerts_on",{},1);
+  const payload={deviceToken:device.token,fcmToken:"example-fcm-registration-token"};
+  await assert.rejects(call("push_register",payload,2),{message:"missing"});
+  await call("push_register",payload,1);
+  const [registered]=await db.query("devices",[["user_id","EQUAL",people[1].id]]);
+  assert.equal(registered.fcmToken,payload.fcmToken);
+  await call("alerts_off",{token:device.token},1);
+  await assert.rejects(call("push_register",payload,1),{message:"missing"});
+});

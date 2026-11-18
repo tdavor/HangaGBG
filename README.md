@@ -1,4 +1,4 @@
-# Hänga Gbg 1.4.3 · Android
+# Hänga Gbg 1.4.4 · Android
 
 [**Ladda ner / Download Hänga Gbg för Android (.apk)**](https://github.com/tdavor/HangaGBG/releases/latest/download/HangaGBG.apk)
 

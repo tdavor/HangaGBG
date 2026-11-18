@@ -14,7 +14,10 @@ manifest=app/src/main/AndroidManifest.xml
 assets=app/src/main/assets
 package_id=se.hangagbg.android
 apk_name=HangaGBG.apk
-if [[ "$variant" == demo ]]; then
+if [[ "$variant" == firebase ]]; then
+  gradle --no-daemon :app:assemblePushRelease
+  "$tools/zipalign" -f 4 app/build/outputs/apk/push/release/app-push-release-unsigned.apk "$out/aligned.apk"
+else
   manifest="$out/AndroidManifest.xml"
   assets="$out/offline-assets"
   mkdir -p "$assets"
@@ -42,10 +45,9 @@ PYTHON
     app/src/main/AndroidManifest.xml > "$manifest"
   package_id=se.hangagbg.android.demo
   apk_name=Hanga-Gbg-Demo.apk
-fi
 "$tools/aapt2" compile --dir app/src/main/res -o "$out/resources.zip"
 "$tools/aapt2" link -I "$platform" --manifest "$manifest" \
-  --rename-manifest-package "$package_id" --version-code 19 --version-name 1.4.3 \
+  --rename-manifest-package "$package_id" --version-code 20 --version-name 1.4.4 \
   --min-sdk-version 26 --target-sdk-version 35 -A "$assets" --java "$out/generated" --custom-package se.hangagbg.android \
   -o "$out/package.apk" "$out/resources.zip"
 java -m jdk.compiler/com.sun.tools.javac.Main -source 17 -target 17 -classpath "$platform" \
@@ -55,6 +57,7 @@ java -m jdk.compiler/com.sun.tools.javac.Main -source 17 -target 17 -classpath "
 "$tools/d8" --min-api 26 --lib "$platform" --output "$out/dex" "$out/classes.zip"
 (cd "$out/dex" && zip -q -j "$out/package.apk" classes.dex)
 "$tools/zipalign" -f 4 "$out/package.apk" "$out/aligned.apk"
+fi
 debug_key="${HANGA_KEYSTORE:-$key_dir/debug.keystore}"
 if [[ ! -f "$debug_key" && -z "${HANGA_KEYSTORE:-}" ]]; then
   keytool -genkeypair -keystore "$debug_key" -storepass android -keypass android \

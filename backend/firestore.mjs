@@ -9,7 +9,7 @@ export async function googleToken(env) {
   const now = Math.floor(Date.now()/1000);
   const jwt = [ {alg:"RS256",typ:"JWT"}, {
     iss:account.client_email, aud:"https://oauth2.googleapis.com/token", iat:now, exp:now+3600,
-    scope:"https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit"
+    scope:"https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit https://www.googleapis.com/auth/firebase.messaging"
   } ].map(part => b64(encoder.encode(JSON.stringify(part)))).join(".");
   const pem = account.private_key.replace(/-----[^-]+-----|\s/g,"");
   const key = await crypto.subtle.importKey("pkcs8",Uint8Array.from(atob(pem),c=>c.charCodeAt(0)),
