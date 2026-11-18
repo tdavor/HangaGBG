@@ -15,7 +15,7 @@ assets=app/src/main/assets
 package_id=se.hangagbg.android
 apk_name=HangaGBG.apk
 if [[ "$variant" == firebase ]]; then
-  gradle --no-daemon :app:assemblePushRelease
+  gradle --no-daemon -Pandroid.useAndroidX=true :app:assemblePushRelease
   "$tools/zipalign" -f 4 app/build/outputs/apk/push/release/app-push-release-unsigned.apk "$out/aligned.apk"
 else
   manifest="$out/AndroidManifest.xml"
