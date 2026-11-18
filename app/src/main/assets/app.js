@@ -502,6 +502,7 @@ function authPage(mode) {
 function discoverPage() {
   return `<section class="hero"><h1>${t("browse")}</h1><p>${t("intro")}</p><div class="actions">${link("quick","#create/quick","primary")}${link("create","#create")} ${action(t("browseEvents"),"data-browse-events")}</div></section>
     ${demo?`<p class="muted">${t("demoBanner")}</p>`:!base?`<p>${t("setup")}</p>${link("connect","#settings")}`:""}
+    <a class="action" href="https://buymeacoffee.com/wjkrddbhyx">☕ Buy me a coffee</a>
     <details class="discover-filters" ${hasFilters()?"open":""}><summary>${t("searchFilters")}</summary>
     <form id="filter" class="grid">
       <div class="wide">${field("keyword","query",filters.query,"search",`placeholder="${t("search")}"`)}</div>

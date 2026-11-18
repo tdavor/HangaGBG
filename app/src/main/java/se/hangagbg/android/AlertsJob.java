@@ -123,7 +123,7 @@ public final class AlertsJob extends JobService {
         PendingIntent intent = PendingIntent.getActivity(this, tag, open,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification notification = new Notification.Builder(this, CHANNEL)
-            .setSmallIcon(getApplicationInfo().icon)
+            .setSmallIcon(R.drawable.notification_icon)
             .setContentTitle(title)
             .setContentText(text)
             .setVisibility(Notification.VISIBILITY_PRIVATE)

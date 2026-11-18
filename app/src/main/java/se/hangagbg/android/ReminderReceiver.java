@@ -131,7 +131,7 @@ public final class ReminderReceiver extends BroadcastReceiver {
             PendingIntent tap=PendingIntent.getActivity(context,0,open,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
             Notification notification=new Notification.Builder(context,CHANNEL)
-                .setSmallIcon(context.getApplicationInfo().icon)
+                .setSmallIcon(R.drawable.notification_icon)
                 .setContentTitle(item.optString("title"))
                 .setContentText(english?"Your meetup is coming up":"Din träff börjar snart")
                 .setVisibility(Notification.VISIBILITY_PRIVATE).setAutoCancel(true).setContentIntent(tap).build();

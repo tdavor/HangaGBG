@@ -83,6 +83,7 @@ public final class MainActivity extends Activity {
                     case "/index.html" -> "text/html";
                     case "/config.js", "/firebase.js", "/app.js" -> "text/javascript";
                     case "/style.css" -> "text/css";
+                    case "/brand-mark.png" -> "image/png";
                     default -> null;
                 };
                 if (type == null) return missing();

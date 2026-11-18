@@ -8,7 +8,7 @@ platform="$sdk/platforms/android-35/android.jar"
 variant="${1:-firebase}"
 case "$variant" in firebase|demo) ;; *) echo "Usage: $0 [firebase|demo]" >&2; exit 2;; esac
 out="$(pwd)/app/build/manual/$variant"
-mkdir -p "$out/classes" "$out/dex"
+mkdir -p "$out/classes" "$out/dex" "$out/generated"
 key_dir="$(pwd)/app/build/manual"
 manifest=app/src/main/AndroidManifest.xml
 assets=app/src/main/assets
@@ -19,11 +19,15 @@ if [[ "$variant" == demo ]]; then
   assets="$out/offline-assets"
   mkdir -p "$assets"
   python3 - "$assets/index.html" <<'PYTHON'
+from base64 import b64encode
 from pathlib import Path
 import sys
 source = Path("app/src/main/assets")
 html = (source / "index.html").read_text()
 html = html.replace("connect-src https:", "connect-src 'none'")
+html = html.replace("img-src 'self'", "img-src 'self' data:")
+brand = b64encode((source / "brand-mark.png").read_bytes()).decode("ascii")
+html = html.replace('src="brand-mark.png"', 'src="data:image/png;base64,' + brand + '"')
 html = html.replace("style-src 'self'; script-src 'self'", "style-src 'unsafe-inline'; script-src 'unsafe-inline'")
 css = (source / "style.css").read_text()
 js = (source / "app.js").read_text().replace("</script", "<\\/script")
@@ -41,11 +45,11 @@ PYTHON
 fi
 "$tools/aapt2" compile --dir app/src/main/res -o "$out/resources.zip"
 "$tools/aapt2" link -I "$platform" --manifest "$manifest" \
-  --rename-manifest-package "$package_id" --version-code 14 --version-name 1.3.8 \
-  --min-sdk-version 26 --target-sdk-version 35 -A "$assets" \
+  --rename-manifest-package "$package_id" --version-code 15 --version-name 1.3.9 \
+  --min-sdk-version 26 --target-sdk-version 35 -A "$assets" --java "$out/generated" --custom-package se.hangagbg.android \
   -o "$out/package.apk" "$out/resources.zip"
 java -m jdk.compiler/com.sun.tools.javac.Main -source 17 -target 17 -classpath "$platform" \
-  -d "$out/classes" app/src/main/java/se/hangagbg/android/*.java
+  -d "$out/classes" app/src/main/java/se/hangagbg/android/*.java "$out/generated/se/hangagbg/android/R.java"
 # Package the compiled classes for D8 without depending on a separate jar executable.
 (cd "$out/classes" && zip -q -r "$out/classes.zip" .)
 "$tools/d8" --min-api 26 --lib "$platform" --output "$out/dex" "$out/classes.zip"
