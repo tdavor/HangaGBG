@@ -10,7 +10,7 @@ const copy = {
   cityMeetupHelp:["Välj tid och mötesplats. Efter publicering kan du bjuda in andra och skriva till deltagare i Hänga Gbg. Kontrollera eventuell bokning på Göteborgs Stads webbplats.","Choose a time and meeting point. After publishing, invite others and message participants in Hänga Gbg. Check any booking requirements on the city website."],
   cityShare:["Dela / bjud in","Share / invite"],
   cityInvite:["Vill du följa med?","Want to come along?"],
-  preferences:["Inställningar","Settings"], interfaceLanguage:["Appens språk","App language"],
+  about:["Om","About"], appVersion:["Version","Version"], author:["Skapad av","Author"], interfaceLanguage:["Appens språk","App language"],
   contact:["Kontakta Hänga Gbg","Contact Hänga Gbg"], expired:["Avslutade träffar","Past meetups"],
   repeat:["Skapa en ny träff från denna","Repeat this meetup"], deleteEvent:["Ta bort träffen","Delete meetup"],
   keepMeetup:["Behåll träffen","Keep meetup"],
@@ -139,6 +139,7 @@ const moods = ["","chill","social","active"];
 const zone = "Europe/Stockholm";
 let lang = localStorage.lang === "en" ? "en" : "sv";
 const demo = window.HANGA_DEMO === true;
+const supportUrl = "https://buymeacoffee.com/wjkrddbhyx";
 let base = demo ? "" : (hangaCloud.configuration.url && hangaCloud.configuration.key ? hangaCloud.configuration.url : "");
 let token = demo ? localStorage.hangaDemoToken || "" : hangaCloud.signedIn ? "firebase" : "";
 let pendingEmail = "";
@@ -437,18 +438,20 @@ function hasArea(event,area) {
 function render() {
   const [page,id,recipient]=route();
   document.documentElement.lang=lang;
-  const pages=["discover","plans","create","messages","profile","settings"];
+  const pages=["discover","plans","create","messages","profile","about"];
   if (user?.admin) pages.push("admin");
-  const menuLinks=pages.map(key=>`<a class="action" href="#${key}" ${page===key?'aria-current="page"':""}>${t(key==="settings"?"preferences":key)}</a>`).join("");
+  const menuLinks=pages.map(key=>`<a class="action" href="#${key}" ${page===key?'aria-current="page"':""}>${t(key)}</a>`).join("");
   $("header-actions").innerHTML=`<details class="account-menu settings-menu">
     <summary aria-label="${t("accountMenu")}" title="${t("accountMenu")}"><span aria-hidden="true">⚙</span></summary>
     <nav class="account-menu-panel" aria-label="${t("accountMenu")}">${menuLinks}</nav>
   </details>`;
   let html;
-  if (page==="settings") html=settingsPage();
+  if (page==="about") html=aboutPage();
+  else if (page==="connect" && !demo && !base) html=connectionPage();
   else if (page==="discover") html=discoverPage();
   else if (page==="auth") html=authPage(id);
   else if (page==="city") html=cityPage(findCity(id));
+  else if (page==="profile") html=profilePage();
   else if (page==="event") html=eventPage(events.find(item=>item.id===Number(id)),recipient);
   else if (!user) html=`<h1>${t(page)}</h1><p>${t("loginRequired")}</p>${link("login","#auth","primary")}`;
   else if (page==="create") {
@@ -460,27 +463,35 @@ function render() {
   }
   else if (page==="report") html=reportPage(id,recipient);
   else if (page==="plans") html=plansPage();
-  else if (page==="profile") html=profilePage();
   else if (page==="admin") html=user.admin && admin ? adminPage() : `<h1>${t("admin")}</h1><p>${t("forbidden")}</p>`;
   else if (page==="messages") html=messagesPage();
   else if (page==="notices") html=noticesPage();
   else html=discoverPage();
   $("main").innerHTML=html;
 }
-function settingsPage() {
-  return `<h1>${t("preferences")}</h1><div class="card">
-    ${select("interfaceLanguage","appLanguage",[["sv","Svenska"],["en","English"]],lang)}
-    <div class="actions">${!demo&&window.HangaAndroid?.checkForUpdate?action(t("checkUpdates"),"data-check-updates"):""}${link("contact","mailto:t.davor@gmail.com")}</div></div>
-    ${!demo&&!base?`<p>${t("connectionHelp")}</p><form data-form="settings">
+function aboutPage() {
+  const version=window.HangaAndroid?.appVersion?.()||"";
+  return `<h1>${t("about")}</h1><section class="card">
+    <h2>Hänga Gbg</h2>
+    ${version?`<p>${t("appVersion")} ${esc(version)}</p>`:""}
+    <p>${t("author")} · T.Davor</p>
+    <div class="actions">
+      ${!demo&&window.HangaAndroid?.checkForUpdate?action(t("checkUpdates"),"data-check-updates"):""}
+      ${link("contact","mailto:t.davor@gmail.com")}
+      <a class="action" href="${supportUrl}">☕ Buy me a coffee</a>
+    </div></section>`;
+}
+function connectionPage() {
+  return `<h1>${t("connect")}</h1><p>${t("connectionHelp")}</p><form data-form="connect">
     ${field("url","url",base,"url",'required placeholder="https://hanga-gbg.ditt-konto.workers.dev"')}
     ${field("key","key",hangaCloud.configuration.key,"text",'required autocomplete="off" spellcheck="false"')}
-    <button class="primary" type="submit">${t("connect")}</button></form>`:""}`;
+    <button class="primary" type="submit">${t("connect")}</button></form>`;
 }
 function authPage(mode) {
   const register=mode==="register";
   if (user) return `<h1>${t("profile")}</h1>${link("profile","#profile","primary")}`;
   if (demo) return `<h1>${t("login")}</h1><p>${t("demoBanner")}</p>${action(t("demo"),"data-demo","primary")}`;
-  if (!base) return `<h1>${t("login")}</h1><p>${t("setup")}</p>${link("connect","#settings","primary")}`;
+  if (!base) return `<h1>${t("login")}</h1><p>${t("setup")}</p>${link("connect","#connect","primary")}`;
   if (mode==="reset") return `<h1>${t("resetPassword")}</h1><p>${t("resetHelp")}</p>
     <form data-form="reset">
       ${field("email","email",pendingEmail,"email",'required autocomplete="email"')}
@@ -501,8 +512,7 @@ function authPage(mode) {
 }
 function discoverPage() {
   return `<section class="hero"><h1>${t("browse")}</h1><p>${t("intro")}</p><div class="actions">${link("quick","#create/quick","primary")}${link("create","#create")} ${action(t("browseEvents"),"data-browse-events")}</div></section>
-    ${demo?`<p class="muted">${t("demoBanner")}</p>`:!base?`<p>${t("setup")}</p>${link("connect","#settings")}`:""}
-    <a class="action" href="https://buymeacoffee.com/wjkrddbhyx">☕ Buy me a coffee</a>
+    ${demo?`<p class="muted">${t("demoBanner")}</p>`:!base?`<p>${t("setup")}</p>${link("connect","#connect")}`:""}
     <details class="discover-filters" ${hasFilters()?"open":""}><summary>${t("searchFilters")}</summary>
     <form id="filter" class="grid">
       <div class="wide">${field("keyword","query",filters.query,"search",`placeholder="${t("search")}"`)}</div>
@@ -695,10 +705,12 @@ function plansPage() {
     <div class="card"><h2>${t("saved")}</h2>${plans.map(event=>card(event)).join("")||`<p>${t("noPlans")}</p>`}</div>`;
 }
 function profilePage() {
+  const language=`<div class="card">${select("interfaceLanguage","appLanguage",[["sv","Svenska"],["en","English"]],lang)}</div>`;
+  if (!user) return `<h1>${t("profile")}</h1>${language}<p>${t("loginRequired")}</p>${link("login","#auth","primary")}`;
   return `<div class="rows between account-heading"><h1>${t("profile")}</h1>
     <details class="account-menu"><summary aria-label="${t("accountMenu")}"><span aria-hidden="true">☰</span></summary>
       <div class="account-menu-panel">
-        ${link("plans","#plans")}${link("notices","#notices")}${link("contact","mailto:t.davor@gmail.com")}
+        ${link("plans","#plans")}${link("notices","#notices")}
         ${action(t("passwordLabel"),'data-account-section="profile-password"')}
         ${blockedPeople.length?action(t("blockedPeople"),'data-account-section="profile-blocked"'):""}
         ${base?action(t("deleteAccount"),'data-account-section="profile-delete"',"danger"):""}
@@ -707,6 +719,7 @@ function profilePage() {
         ${action(t("logout"),"data-logout")}
       </div>
     </details></div>
+    ${language}
     ${blockedPeople.length?`<details id="profile-blocked" hidden><summary>${t("blockedPeople")}</summary>${blockedPeople.map(p=>
       `<p>${esc(p.name)} ${action(t("unblockPerson"),`data-block-person="${Number(p.id)}" data-value="false"`)}</p>`).join("")}</details>`:""}
     <form data-form="profile">
@@ -771,7 +784,7 @@ document.addEventListener("submit",async event=>{
   const button=form.querySelector("button:not([type=button])");
   button.disabled=true;
   try {
-    if (mode==="settings") {
+    if (mode==="connect") {
       await disableAlerts();
       await hangaCloud.connect(data.url,data.key.trim());
       if (!hangaCloud.signedIn) session();
