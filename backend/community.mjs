@@ -119,22 +119,34 @@ export async function notifyFollowers(db,event,notices) {
   }).map(row=>[row.follower,"following"]));
 }
 
+export function duePrompt(event) {
+  if(event.cancelled||event.hidden) return null;
+  const remaining=Date.parse(event.start)-Date.now();
+  const kind=remaining>0&&remaining<=86400000?"attendance":until(event)<=Date.now()&&Date.now()-until(event)<7*86400000?"feedback":"";
+  return kind?{kind,marker:key(event.id,kind)+"-"+Date.parse(event.start)}:null;
+}
+
+export async function pendingPrompts(db,events) {
+  const due=events.map(event=>({event,prompt:duePrompt(event)})).filter(row=>row.prompt);
+  const markers=await db.getMany("event_prompts",due.map(row=>row.prompt.marker));
+  // Bound each invocation's requests; completed markers let later cron runs continue the queue.
+  return due.filter(row=>!markers.has(row.prompt.marker)).slice(0,4).map(row=>row.event);
+}
+
 export async function sendDueNotices(db,notices,id) {
   const event=await db.get("events",id);
-  const events=event?[event]:[];
-  for(const event of events) {
-    if(event.cancelled||event.hidden) continue;
-    const owner=await db.get("profiles",event.owner);
-    if(!owner||owner.blocked||owner.deleted) continue;
-    const remaining=Date.parse(event.start)-Date.now();
-    const due=remaining>0&&remaining<=86400000?"attendance":until(event)<=Date.now()&&Date.now()-until(event)<7*86400000?"feedback":"";
-    if(!due) continue;
-    const marker=key(event.id,due)+"-"+Date.parse(event.start);
-    if(await db.get("event_prompts",marker)) continue;
-    const plans=await db.query("plans",[eq("event_id",event.id)]);
-    const recipients=plans.filter(p=>p.joined&&(due!=="attendance"||p.confirmedStart!==event.start)).map(p=>p.user_id);
-    if(due==="feedback") recipients.push(event.owner);
-    await notices(db,event,[...new Set(recipients)].map(uid=>[uid,due]));
+  const prompt=event&&duePrompt(event);
+  if(!prompt) return;
+  const {kind,marker}=prompt;
+  if(await db.get("event_prompts",marker)) return;
+  const owner=await db.get("profiles",event.owner);
+  if(!owner||owner.blocked||owner.deleted) {
     db.put("event_prompts",marker,{event_id:event.id});
+    return;
   }
+  const plans=await db.query("plans",[eq("event_id",event.id)]);
+  const recipients=plans.filter(p=>p.joined&&(kind!=="attendance"||p.confirmedStart!==event.start)).map(p=>p.user_id);
+  if(kind==="feedback") recipients.push(event.owner);
+  await notices(db,event,[...new Set(recipients)].map(uid=>[uid,kind]));
+  db.put("event_prompts",marker,{event_id:event.id});
 }

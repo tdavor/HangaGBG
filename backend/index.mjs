@@ -2,6 +2,7 @@ import {Store,googleToken} from "./firestore.mjs";
 import {action,reads} from "./actions.mjs";
 import {sendWelcome} from "./welcome.mjs";
 import {sendChatPush} from "./push.mjs";
+import {pendingPrompts} from "./community.mjs";
 import {cityCalendar} from "./city-events.mjs";
 
 const headers = {"Content-Type":"application/json","Cache-Control":"no-store",
@@ -65,7 +66,7 @@ export default {
       ["start","GREATER_THAN",new Date(Date.now()-15*86400000).toISOString()],
       ["start","LESS_THAN",new Date(Date.now()+86400000).toISOString()]
     ]);
-    for(const event of events) await db.run(store=>action(store,"due_notices",{id:event.id},null,env),true);
+    for(const event of await pendingPrompts(db,events)) await db.run(store=>action(store,"due_notices",{id:event.id},null,env),true);
   },
   async fetch(request,env,ctx) {
     if (request.method==="OPTIONS") return new Response(null,{status:204,headers});

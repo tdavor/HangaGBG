@@ -270,3 +270,16 @@ test("availability expires at local midnight and follows respect blocking",async
   await call("block_person",{id:people[0].id,enabled:true},1);
   assert.deepEqual(await call("follow_list",{},1),[]);
 });
+
+test("scheduled prompt batches skip completed meetups and resume at the next one",async()=>{
+  const {db,call,id,event}=await app();
+  const {pendingPrompts}=await import('../community.mjs');
+  for(let i=0;i<6;i++) db.put('events',100+i,{...event,id:100+i,owner:1});
+  const events=await db.query('events');
+  const first=await pendingPrompts(db,events);
+  assert.equal(first.length,4);
+  for(const row of first) await call('due_notices',{id:row.id},null);
+  const next=await pendingPrompts(db,events);
+  assert.equal(next.length,3);
+  assert.ok(next.every(row=>!first.some(done=>done.id===row.id)));
+});
