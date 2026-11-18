@@ -210,6 +210,14 @@ public final class MainActivity extends Activity {
             });
         }
 
+        @JavascriptInterface public String appVersion() {
+            try {
+                return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            } catch (PackageManager.NameNotFoundException ignored) {
+                return "";
+            }
+        }
+
         @JavascriptInterface public void checkForUpdate(String language) {
             runOnUiThread(() -> {
                 if (appUpdate != null) appUpdate.checkNow("en".equals(language));

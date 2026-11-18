@@ -1,4 +1,4 @@
-# Hänga Gbg 1.3.9 · Android
+# Hänga Gbg 1.4.0 · Android
 
 Svenska
 
