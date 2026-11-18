@@ -84,7 +84,11 @@ public final class AlertsJob extends JobService {
             }
             if ("cancelled".equals(kind)) ReminderReceiver.cancelEvent(this,eventId);
             long peer = "message".equals(kind) ? alert.optLong("sender_id", -1) : 0;
-            notifyEvent(notifications, Long.hashCode(id), eventId, peer, alert.getString("title"), label(kind,english));
+            if (peer>0 && preferences.getLong("owner",0)>0) {
+                ChatNotifications.show(this,preferences.getLong("owner",0),peer,id);
+            } else {
+                notifyEvent(notifications, Long.hashCode(id), eventId, peer, alert.getString("title"), label(kind,english));
+            }
             cursor = id;
         }
         if (token.equals(preferences.getString("token",""))) {

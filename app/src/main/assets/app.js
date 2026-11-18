@@ -268,6 +268,21 @@ window.hangaRefreshReminders=async ()=>{
   }
 };
 let alertSetup;
+let pushRegistration, registeredPush;
+function syncFirebasePush() {
+  const android=window.HangaAndroid;
+  const scope=reminderScope();
+  const deviceToken=localStorage.hangaAlertToken;
+  const fcmToken=android?.firebasePushToken?.();
+  if (demo || !base || !scope || !deviceToken || !fcmToken || !android.notificationsEnabled()
+      || !android.alertsScheduled(deviceToken) || pushRegistration) return;
+  const key=`${scope}:${deviceToken}:${fcmToken}`;
+  if (key===registeredPush) return;
+  pushRegistration=api("/push/register",{deviceToken,fcmToken}).then(()=>{
+    if (scope===reminderScope()) registeredPush=key;
+  }).catch(()=>{}).finally(()=>{pushRegistration=undefined;});
+}
+window.hangaSyncPush=syncFirebasePush;
 function syncAlertProfile() {
   const android=window.HangaAndroid;
   const scope=reminderScope();
@@ -275,6 +290,7 @@ function syncAlertProfile() {
   const existing=localStorage.hangaAlertToken||"";
   if (android.alertsScheduled(existing)) {
     android.syncAlertProfile(existing,String(user.id),user.area||"",lang);
+    syncFirebasePush();
     return;
   }
   if (alertSetup) return;
@@ -310,6 +326,7 @@ async function disableAlerts() {
   window.HangaAndroid.stopAlerts();
   const pushToken=localStorage.hangaAlertToken;
   localStorage.removeItem("hangaAlertToken");
+  registeredPush=undefined;
   if (pushToken && base && user) {
     try { await api("/alerts/off",{token:pushToken}); } catch {}
   }
@@ -898,7 +915,10 @@ document.addEventListener("visibilitychange",()=>{
   if (document.visibilityState!=="hidden") window.hangaRefreshChats();
 });
 setInterval(()=>{
-  if (document.visibilityState!=="hidden") window.hangaRefreshChats();
+  if (document.visibilityState!=="hidden") {
+    window.hangaRefreshChats();
+    syncFirebasePush();
+  }
 },15000);
 function noticesPage() {
   return `<h1>${t("notices")}</h1>${action(t("refresh"),"data-refresh")}`+

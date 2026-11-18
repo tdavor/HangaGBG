@@ -1,6 +1,7 @@
 import {Store,googleToken} from "./firestore.mjs";
 import {action,reads} from "./actions.mjs";
 import {sendWelcome} from "./welcome.mjs";
+import {sendChatPush} from "./push.mjs";
 import {cityCalendar} from "./city-events.mjs";
 
 const headers = {"Content-Type":"application/json","Cache-Control":"no-store",
@@ -84,6 +85,11 @@ export default {
         return reply({service:"Hanga Gbg Firebase",version:1,eventDeletion:"permanent",apiKey:env.FIREBASE_API_KEY});
       }
       const result=await db.run(store=>action(store,name,p,caller,env),!reads.has(name));
+      if (result.pushChat) {
+        ctx.waitUntil(sendChatPush(db,env,token,result.pushChat).catch(error=>
+          console.error("Chat push delivery failed:",error.message)));
+        return reply({});
+      }
       if (result.deleteAuth) {
         await deleteAuth(env,token,result.deleteAuth,
           name==="delete_account"?request.headers.get("Authorization").slice(7):undefined);

@@ -180,6 +180,10 @@ public final class MainActivity extends Activity {
             runOnUiThread(() -> ReminderReceiver.sync(MainActivity.this,entries,scope,"en".equals(language)));
         }
 
+        @JavascriptInterface public String firebasePushToken() {
+            return getSharedPreferences(ChatNotifications.PUSH_STORAGE,MODE_PRIVATE).getString("token","");
+        }
+
         @JavascriptInterface public boolean notificationsEnabled() {
             return getSystemService(NotificationManager.class).areNotificationsEnabled();
         }
@@ -248,7 +252,10 @@ public final class MainActivity extends Activity {
                     .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                     .setPeriodic(JobInfo.getMinPeriodMillis()).setPersisted(true).build();
                 try {
-                    if (getSystemService(JobScheduler.class).schedule(job)==JobScheduler.RESULT_SUCCESS) return;
+                    if (getSystemService(JobScheduler.class).schedule(job)==JobScheduler.RESULT_SUCCESS) {
+                        web.evaluateJavascript("window.hangaSyncPush?.()",null);
+                        return;
+                    }
                 } catch (IllegalArgumentException | SecurityException error) {
                     android.util.Log.w("HangaGBG","Could not schedule notifications",error);
                 }

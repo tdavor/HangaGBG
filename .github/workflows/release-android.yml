@@ -14,11 +14,15 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
       - uses: android-actions/setup-android@v4
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Build signed HangaGBG APK
         env:
+          FIREBASE_CLIENT_CONFIG: ${{ secrets.HANGA_GOOGLE_SERVICES_JSON }}
           KEYSTORE_BASE64: ${{ secrets.HANGA_KEYSTORE_BASE64 }}
           HANGA_STOREPASS: ${{ secrets.HANGA_STOREPASS }}
           HANGA_KEYPASS: ${{ secrets.HANGA_KEYPASS }}
@@ -30,9 +34,11 @@ jobs:
           : "${HANGA_KEYPASS:?Missing HANGA_KEYPASS}"
           : "${HANGA_KEY_ALIAS:?Missing HANGA_KEY_ALIAS}"
           export HANGA_KEYSTORE="$RUNNER_TEMP/hangagbg-release.keystore"
-          trap 'rm -f "$HANGA_KEYSTORE"' EXIT
+          trap 'rm -f "$HANGA_KEYSTORE" app/google-services.json' EXIT
           umask 077
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$HANGA_KEYSTORE"
+          : "${FIREBASE_CLIENT_CONFIG:?Missing HANGA_GOOGLE_SERVICES_JSON}"
+          printf '%s' "$FIREBASE_CLIENT_CONFIG" > app/google-services.json
           bash scripts/build-apk.sh firebase
           apk=app/build/manual/firebase/HangaGBG.apk
           version=$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$apk" |

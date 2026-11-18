@@ -167,7 +167,7 @@ const hangaCloud = (() => {
     }
     const routes={"/events":data?"create":"events","/me":"me","/messages":"messages","/chats":"chat_inbox","/chats/read":"chat_read","/chats/send":"chat_send","/notices":"notices",
       "/admin":"admin","/admin/settings":"admin_settings","/report":"report","/blocks":"block_list",
-      "/blocks/change":"block_person","/reports/resolve":"resolve_report","/alerts/on":"alerts_on","/alerts/off":"alerts_off"};
+      "/blocks/change":"block_person","/reports/resolve":"resolve_report","/push/register":"push_register","/alerts/on":"alerts_on","/alerts/off":"alerts_off"};
     if (routes[path]) return rpc(routes[path],data||{},access);
     const member=path.match(/^\/members\/(\d+)$/);
     if (member) return rpc("member_profile",{id:Number(member[1])},access);
