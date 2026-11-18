@@ -46,18 +46,27 @@ async function deleteAuth(env,token,uid,idToken) {
 }
 
 async function removeEventRelations(db,id) {
-  for (const collection of ["plans","messages"]) {
+  for (const collection of ["plans","messages","group_messages","feedback"]) {
     while (true) {
       const rows=await db.query(collection,[["event_id","EQUAL",id]],null,200);
       if (!rows.length) break;
       db.writes.clear();
-      for (const row of rows) db.remove(collection,collection==="plans"?id+"-"+row.user_id:row.id);
+      for (const row of rows) db.remove(collection,["plans","feedback"].includes(collection)?id+"-"+row.user_id:row.id);
       await db.send(":commit",{writes:[...db.writes.values()]});
     }
   }
 }
 
 export default {
+  async scheduled(controller,env,ctx) {
+    const token=await googleToken(env);
+    const db=new Store(env.FIREBASE_PROJECT,token);
+    const events=await db.query("events",[
+      ["start","GREATER_THAN",new Date(Date.now()-15*86400000).toISOString()],
+      ["start","LESS_THAN",new Date(Date.now()+86400000).toISOString()]
+    ]);
+    for(const event of events) await db.run(store=>action(store,"due_notices",{id:event.id},null,env),true);
+  },
   async fetch(request,env,ctx) {
     if (request.method==="OPTIONS") return new Response(null,{status:204,headers});
     const path=new URL(request.url).pathname;
@@ -75,7 +84,7 @@ export default {
       const name=path==="/alerts"?"poll":input?.action;
       const p=path==="/alerts"?input:(input?.payload??{});
       if (!p || typeof p!=="object" || Array.isArray(p) || !/^[a-z_]{1,24}$/.test(name||"")) throw new Error("invalid");
-      if (name==="poll" && path!=="/alerts") throw new Error("missing");
+      if (name==="due_notices" || (name==="poll" && path!=="/alerts")) throw new Error("missing");
       if (!/^[a-z][a-z0-9-]{4,29}$/.test(env.FIREBASE_PROJECT||"") || !env.FIREBASE_API_KEY || !env.GOOGLE_SERVICE_ACCOUNT) throw new Error("schemaMissing");
       const caller=path==="/alerts"?null:await identity(request,env);
       const token=await googleToken(env);

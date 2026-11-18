@@ -1,6 +1,30 @@
 "use strict";
 
 const copy = {
+  todayCompany:["Sällskap idag","Company today"], availableToday:["Jag vill ses idag","I'm available today"], viewAvailability:["Visa alla tillgängliga","View everyone available"],
+  availabilityTime:["Tillgänglig från","Available from"], availableUntil:["Till","Until"],
+  removeAvailability:["Ta bort min tillgänglighet","Remove my availability"],
+  availabilityHelp:["Syns för inloggade medlemmar och försvinner senast vid midnatt. Starta en träff och dela den med den du vill möta.","Visible to signed-in members until midnight at the latest. Create a meetup and share it with the person you want to meet."],
+  todayEmpty:["Ingen har angett tillgänglighet än.","No one has posted availability yet."],
+  activity:["Aktivitet","Activity"], groupChat:["Gruppchatt","Group chat"], groupHelp:["Bara arrangören och anmälda deltagare kan läsa och skriva här.","Only the organizer and joined participants can read and write here."],
+  meetingPoint:["Mötesplats","Meeting point"], meetingNote:["Så hittar vi varandra","How to recognize each other"],
+  meetingMap:["Google Maps-länk till mötespunkten","Google Maps link to the meeting point"],
+  meetingHelp:["Öppna Google Maps, sätt en nål på platsen och klistra in länken från Dela.","Open Google Maps, drop a pin at the meeting point, and paste its Share link."],
+  endTime:["Sluttid","End time"], recurrence:["Upprepa varje vecka","Repeat weekly"],
+  occurrences:["Antal tillfällen","Number of occurrences"], recurrenceHelp:["Varje tillfälle får egna anmälningar. Redigering och avbokning gäller det valda tillfället.","Each occurrence has its own RSVPs. Edits and cancellations apply to the selected occurrence."],
+  follow:["Följ arrangören","Follow organizer"], unfollow:["Sluta följa","Unfollow"], following:["Ny träff från en arrangör du följer","New meetup from an organizer you follow"],
+  followingTitle:["Arrangörer jag följer","Organizers I follow"], attendance:["Bekräfta att du kommer","Confirm you are coming"],
+  confirmAttendance:["Jag kommer","I'm coming"], confirmed:["Du har bekräftat att du kommer","You have confirmed attendance"],
+  confirmationHelp:["Bekräfta under det sista dygnet. Om du inte kan komma, lämna din plats så att någon annan kan anmäla sig.","Confirm during the last 24 hours. If you cannot come, release your place so someone else can join."],
+  feedback:["Hur var träffen?","How was the meetup?"], feedbackHelp:["Ditt svar är privat och används av appens administratör för att förbättra träffarna.","Your response is private and used by the app administrator to improve meetups."],
+  welcomed:["Kände du dig välkommen?","Did you feel welcome?"], comeAgain:["Skulle du komma igen?","Would you attend again?"],
+  chooseAnswer:["Välj ett svar","Choose an answer"], yes:["Ja","Yes"], partly:["Delvis","Partly"], no:["Nej","No"], maybe:["Kanske","Maybe"],
+  feedbackAdmin:["Privata omdömen","Private feedback"],
+  feedbackNote:["Berätta mer (valfritt)","Tell us more (optional)"], yourFeedback:["Ditt sparade svar","Your saved response"],
+  group:["Nytt meddelande i gruppchatten","New group chat message"],
+  repeated:["Återkommande träff","Recurring meetup"], pastAttended:["Tidigare träffar jag deltog i","Past meetups I attended"],
+  groupReport:["Anmäl gruppmeddelande","Report group message"],
+
   cityCalendar:["Göteborgs Stad","City of Gothenburg"],
   cityCalendarUnavailable:["Stadens kalendarium är tillfälligt otillgängligt.","The city calendar is temporarily unavailable."],
   eventSource:["Visa träffar från","Show events from"],
@@ -149,6 +173,7 @@ let token = demo ? localStorage.hangaDemoToken || "" : hangaCloud.signedIn ? "fi
 let pendingEmail = "";
 let blockedPeople=[];
 let memberProfile = null;
+let availability=[],followingPeople=[],groupRows=[],groupEventId=0,feedbackData={};
 let user = null, events = [], messageList = [], noticeList = [], admin = null;
 let cityItems = [], cityRequest, cityLoadedAt = 0, cityUnavailable = false;
 const cityId = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
@@ -312,6 +337,7 @@ function syncAlertProfile() {
 window.hangaSyncAlerts=syncAlertProfile;
 function session(result) {
   messageList=[];
+  availability=[];followingPeople=[];groupRows=[];groupEventId=0;feedbackData={};
   token=result?.token || "";
   user=result?.user || null;
   if (demo) {
@@ -446,7 +472,24 @@ async function load() {
         if (error.message==="blocked") status("blocked");
       } else throw error; }
     }
-    if ((demo || base) && ["discover","plans","event","create","admin","city"].includes(page)) {
+    if (!demo && user && ["discover","availability"].includes(page)) {
+      const entries=await api("/availability");
+      if(version!==refreshId) return;
+      availability=entries;
+      if(page==="discover" && $("today-company")) $("today-company").innerHTML=todayCompany();
+    }
+    if (!demo && user && page==="profile") followingPeople=await api("/follows");
+    if (!demo && user && page==="group") {
+      const rows=await api("/groups",{id:Number(detail)});
+      if(version!==refreshId) return;
+      groupRows=rows;groupEventId=Number(detail);
+    }
+    if (!demo && user && page==="feedback") {
+      const value=await api("/feedback",{id:Number(detail)});
+      if(version!==refreshId) return;
+      feedbackData={...value,event_id:Number(detail)};
+    }
+    if ((demo || base) && ["discover","plans","event","create","admin","city","group","feedback"].includes(page)) {
       const current=await api("/events");
       if (version!==refreshId) return;
       events=current;
@@ -514,6 +557,9 @@ function render() {
   else if (page==="messages" && !user) html=`<h1>${t("messages")}</h1><p>${t("loginRequired")}</p>
     ${link("login",Number(id)>0?`#auth/login/chat/${Number(id)}`:"#auth","primary")}`;
   else if (!user) html=`<h1>${t(page)}</h1><p>${t("loginRequired")}</p>${link("login","#auth","primary")}`;
+  else if (page==="availability") html=availabilityPage();
+  else if (page==="group") html=groupPage(Number(id));
+  else if (page==="feedback") html=feedbackPage(Number(id));
   else if (page==="create") {
     const draft=user.admin&&id==="draft"?starterMeetups[Number(recipient)]:null;
     const repeat=id==="repeat"?events.find(item=>item.id===Number(recipient)&&item.owner===user.id&&isPast(item)):null;
@@ -529,6 +575,7 @@ function render() {
   else html=discoverPage();
   $("main").innerHTML=html;
   if (page==="messages") scrollChatToLatest();
+  if (page==="group" && $("group-content")) $("group-content").scrollTop=$("group-content").scrollHeight;
 }
 function aboutPage() {
   const version=window.HangaAndroid?.appVersion?.()||"";
@@ -571,9 +618,79 @@ function authPage(mode) {
     <div class="actions">${register?"":action(t("forgotPassword"),"data-forgot-password")} ${link(register?"login":"register",register?"#auth":"#auth/register")}
     </div>`;
 }
+function todayCompany(all=false) {
+  const current=availability.filter(entry=>Date.parse(entry.until)>Date.now());
+  return `<div class="rows between"><h2>${t("todayCompany")}</h2>${!all?link("availableToday","#availability"):""}</div>
+    ${current.length?`<ul class="availability-list">${(all?current:current.slice(0,3)).map(entry=>`<li>
+      ${memberLink(entry.user_id,entry.name)} · ${esc(t(entry.activity))} · ${esc(entry.area)}
+      <small>${esc(localDate(new Date(entry.from)).slice(11))}–${esc(localDate(new Date(entry.until)).slice(11))}</small>
+      </li>`).join("")}</ul>${!all&&current.length>3?link("viewAvailability","#availability"):""}`:`<p class="muted">${t("todayEmpty")}</p>`}`;
+}
+function availabilityPage() {
+  const own=availability.find(entry=>entry.user_id===user.id);
+  const date=localDate(new Date()).slice(0,10);
+  const from=own?localDate(new Date(own.from)).slice(11):localDate(new Date(Date.now()+60000)).slice(11);
+  return `<h1>${t("todayCompany")}</h1><p>${t("availabilityHelp")}</p><form data-form="availability">
+    ${areaSelect(own?.area||user.area)}
+    ${select("activity","activity",["fika","walk","other"].map(v=>[v,t(v)]),own?.activity||"fika")}
+    <div class="grid">${field("availabilityTime","from",from,"time","required")}${field("availableUntil","until",own?localDate(new Date(own.until)).slice(11):"23:59","time","required")}</div>
+    <input name="day" type="hidden" value="${date}">
+    <button class="primary">${t("save")}</button></form>
+    ${own?action(t("removeAvailability"),"data-remove-availability","danger"):""}
+    <section class="card">${todayCompany(true)}</section><div class="actions">${link("quick","#create/quick","primary")}</div>`;
+}
+function groupContent() {
+  const rows=groupEventId===Number(route()[1])?groupRows:[];
+  return rows.length?rows.map(row=>`<section class="group-entry">
+    <strong>${memberLink(row.sender,row.name)}</strong><p>${esc(row.body)}</p><small class="muted">${esc(dateLabel(row.created))}</small>
+    ${row.sender!==user.id?link("groupReport",`#report/group/${Number(row.id)}`):""}</section>`).join(""):`<p class="muted">${t("noMessages")}</p>`;
+}
+let groupRequest;
+async function refreshGroup() {
+  const [page,id]=route();
+  if(page!=="group"||!user||demo||groupRequest) return;
+  const owner=user.id;
+  groupRequest=api("/groups",{id:Number(id)});
+  try {
+    const rows=await groupRequest;
+    if(user?.id!==owner||route().join("/")!==page+"/"+id) return;
+    groupRows=rows;groupEventId=Number(id);
+    const panel=$("group-content");
+    if(panel) {
+      const html=groupContent();
+      if(panel.dataset.last!==html) {
+        const scroll=panel.scrollTop,atEnd=panel.scrollHeight-scroll-panel.clientHeight<48;
+        panel.innerHTML=html;panel.dataset.last=html;
+        panel.scrollTop=atEnd?panel.scrollHeight:scroll;
+      }
+    }
+  } finally {groupRequest=undefined;}
+}
+setInterval(()=>{
+  if(document.visibilityState!=="hidden") void refreshGroup().catch(()=>{});
+},15000);
+function groupPage(id) {
+  const e=events.find(e=>e.id===id);
+  if(!e||!(e.joined||e.owner===user.id)||e.hidden||e.cancelled) return `<p>${t("forbidden")}</p>`;
+  return `<h1>${t("groupChat")}</h1><p>${link("details",`#event/${id}`)} · ${esc(e.title)}</p>
+    <p class="muted">${t("groupHelp")}</p><div id="group-content" class="card chat-timeline">${groupContent()}</div>
+    <form data-form="group" data-id="${id}">${textArea("message","body","","required maxlength=1500")}<button class="primary">${t("send")}</button></form>`;
+}
+function feedbackPage(id) {
+  const e=events.find(e=>e.id===id);
+  if(!e||!(e.joined||e.owner===user.id)||Date.parse(e.end||e.start)>Date.now()) return `<p>${t("forbidden")}</p>`;
+  const value=feedbackData.event_id===id?feedbackData:{};
+  return `<h1>${t("feedback")}</h1><p>${esc(e.title)}</p><p class="muted">${t("feedbackHelp")}</p>
+    <form data-form="feedback" data-id="${id}">
+      ${select("welcomed","welcome",[["",t("chooseAnswer")],...["yes","partly","no"].map(v=>[v,t(v)])],value.welcome||"")}
+      ${select("comeAgain","again",[["",t("chooseAnswer")],...["yes","maybe","no"].map(v=>[v,t(v)])],value.again||"")}
+      ${textArea("feedbackNote","note",value.note||"","maxlength=1500")}
+      <button class="primary">${t("save")}</button></form>`;
+}
 function discoverPage() {
   return `<section class="hero"><h1>${t("browse")}</h1><p>${t("intro")}</p><div class="actions">${link("quick","#create/quick","primary")}${link("create","#create")} ${action(t("browseEvents"),"data-browse-events")}</div></section>
     ${demo?`<p class="muted">${t("demoBanner")}</p>`:!base?`<p>${t("setup")}</p>${link("connect","#connect")}`:""}
+    ${!demo&&user?`<section id="today-company" class="card">${todayCompany()}</section>`:""}
     <details class="discover-filters" ${hasFilters()?"open":""}><summary>${t("searchFilters")}</summary>
     <form id="filter" class="grid">
       <div class="wide">${field("keyword","query",filters.query,"search",`placeholder="${t("search")}"`)}</div>
@@ -682,12 +799,12 @@ function eventBadges(e) {
 }
 function safetyActions(person, type, id) {
   if (!user || Number(person)===user.id) return "";
-  return `<div class="actions">${link({event:"reportEvent",person:"reportPerson",message:"reportMessage"}[type],`#report/${type}/${Number(id)}`)}
+  return `<div class="actions">${link({event:"reportEvent",person:"reportPerson",message:"reportMessage",group:"groupReport"}[type],`#report/${type}/${Number(id)}`)}
     ${type==="person"?"":link("reportPerson",`#report/person/${Number(person)}`)}
     ${action(t("blockPerson"),`data-block-person="${Number(person)}" data-value="true"`)}</div>`;
 }
 function reportPage(type,id) {
-  if (!["event","person","message"].includes(type)||!Number(id)) return `<h1>${t("missing")}</h1>`;
+  if (!["event","person","message","group"].includes(type)||!Number(id)) return `<h1>${t("missing")}</h1>`;
   return `<h1>${t("report")}</h1><form data-form="report" data-type="${type}" data-id="${Number(id)}">
     ${textArea("reportReason","reason","","required maxlength=500")}<button class="primary">${t("report")}</button></form>`;
 }
@@ -720,6 +837,7 @@ function eventPage(e, recipient) {
   const form=user&&(e.joined||e.owner===user.id)&&user.id!==target&&!e.cancelled?`<form data-form="message" data-id="${Number(e.id)}" data-recipient="${Number(target)}">
     ${textArea("message","body","","required maxlength=1500")}<button class="primary">${t("send")}</button></form>`:"";
   const endpoint=googleMapsUrl(e);
+  const member=user&&(e.joined||e.owner===user.id);
   const command=(name,op,enabled,klass="")=>action(t(name),`data-event="${Number(e.id)}" data-op="${op}" data-value="${enabled}"`,klass);
   const open=!e.cancelled && !e.hidden && new Date(e.start)>new Date();
   const joinButton=e.joined?command("leave","join",false):
@@ -732,6 +850,14 @@ function eventPage(e, recipient) {
     <div class="actions">${link("map",endpoint)}${typeof e.source==="string"&&e.source.startsWith("https://")?link("source",e.source):""}
     ${!e.cancelled?action(t("share"),`data-share="${Number(e.id)}"`):""}
     ${user?`${joinButton}${waitingButton}${demo&&e.waitlisted&&e.count>=e.capacity?command("simulateVacancy","simulate",true):""}${command(e.saved?"removePlan":"savePlan","save",!e.saved)}`:open?link("login","#auth","primary"):""}</div>
+    ${e.meetingNote||e.meetingMap?`<section class="card"><h2>${t("meetingPoint")}</h2><p>${esc(e.meetingNote||"")}</p>${e.meetingMap?link("map",e.meetingMap):""}</section>`:""}
+    ${e.series?`<p class="muted">${t("repeated")}</p>`:""}
+    ${!demo&&member&&!e.cancelled?`<section class="card event-participation"><h2>${t("plans")}</h2>
+      <div class="actions">${link("groupChat",`#group/${e.id}`,"primary")}
+      ${Date.parse(e.end||e.start)<=Date.now()?link("feedback",`#feedback/${e.id}`):""}</div>
+      ${e.joined&&open&&Date.parse(e.start)-Date.now()<=86400000?`<p>${t("confirmationHelp")}</p>
+        ${e.confirmed?`<p class="pill">${t("confirmed")}</p>`:action(t("confirmAttendance"),`data-confirm-attendance="${e.id}"`,"primary")}
+        ${command("leave","join",false)}`:""}</section>`:""}
     ${reminderForm(e)}
     ${manager?`<div class="card"><div class="actions">${e.cancelled?"":link("edit","#create/"+e.id)}${open?command("cancelEvent","cancel",true,"danger"):""}${command("deleteEvent","delete",true,"danger")}
        ${user.admin?command(e.hidden?"show":"hide","moderate",!e.hidden):""}</div></div>`:""}${user&&(manager||e.joined)?`<div class="card">${command("attendees","participants",true)}<div id="participants"></div></div>`:""}${form}${safetyActions(target,recipient?"person":"event",recipient?target:e.id)}`;
@@ -747,6 +873,12 @@ function eventForm(e,draft,repeat,city) {
     ${select("mood","mood",moods.map(x=>[x,x?t(x):"—"]),values?.mood)}</div>
     ${areaSelect(values?.area||draft?.area||user.area)}${field("place","place",values?.place||draft?.place,"text",'required maxlength="180"')}
     ${field("date","start",draft||repeat?"":localDate(cityStart||(e?new Date(e.start):new Date(Date.now()+86400000))),"datetime-local",'required')}
+    ${field("endTime","end",draft||repeat?"":localDate(e?.end?new Date(e.end):new Date((cityStart?cityStart.getTime():e?Date.parse(e.start):Date.now()+86400000)+7200000)),"datetime-local","required")}
+    <details><summary>${t("meetingPoint")}</summary><p class="muted">${t("meetingHelp")}</p>
+      ${textArea("meetingNote","meetingNote",values?.meetingNote||"","maxlength=400")}
+      ${field("meetingMap","meetingMap",values?.meetingMap||"","url",'maxlength="750" placeholder="https://maps.app.goo.gl/…"')}</details>
+    ${!demo&&!e&&!city?`<details><summary>${t("recurrence")}</summary><p class="muted">${t("recurrenceHelp")}</p>
+      ${select("occurrences","repeatCount",Array.from({length:12},(_,i)=>[String(i+1),String(i+1)]),"1")}</details>`:""}
     <div class="grid">${field("price","price",values?.price??0,"number",'required min="0" max="100000"')}
     ${field("capacity","capacity",values?.capacity??draft?.capacity??6,"number",'required min="1" max="5000"')}</div>
     ${e?.quick?'<input type="hidden" name="quick" value="on">':""}
@@ -759,9 +891,11 @@ function plansPage() {
   const owned=events.filter(event=>event.owner===user.id);
   const active=owned.filter(event=>!isPast(event));
   const archived=owned.filter(isPast).reverse();
+  const attendedPast=events.filter(event=>isPast(event)&&event.joined&&event.owner!==user.id);
   const plans=events.filter(event=>!isPast(event)&&(event.joined||event.saved||event.waitlisted));
   return `<h1>${t("plans")}</h1><h2>${t("own")}</h2>${active.map(event=>card(event)).join("")||`<p>${t("none")}</p>`}
     ${link("create","#create","primary")}
+    <div class="card"><h2>${t("pastAttended")}</h2>${attendedPast.map(event=>card(event)).join("")||`<p>${t("none")}</p>`}</div>
     <div class="card"><h2>${t("expired")}</h2>${archived.map(event=>card(event,link("repeat",`#create/repeat/${Number(event.id)}`))).join("")||`<p>${t("none")}</p>`}</div>
     <div class="card"><h2>${t("saved")}</h2>${plans.map(event=>card(event)).join("")||`<p>${t("noPlans")}</p>`}</div>`;
 }
@@ -773,6 +907,7 @@ function memberPage(id) {
   return `<h1>${member?esc(member.name):t("memberProfile")}</h1>${member?`<section class="card">
     ${member.bio?`<h2>${t("bio")}</h2><p>${esc(member.bio)}</p>`:""}
     ${member.languages?`<h2>${t("spokenLanguages")}</h2><p>${esc(member.languages)}</p>`:""}
+    ${!demo&&user.id!==id?action(t(member.following?"unfollow":"follow"),`data-follow="${id}" data-enabled="${!member.following}"`):""}
     </section>${safetyActions(id,"person",id)}`:""}`;
 }
 function profilePage() {
@@ -789,6 +924,7 @@ function profilePage() {
       </div>
     </details></div>
     ${language}
+    ${!demo?`<details class="card"><summary>${t("followingTitle")}</summary>${followingPeople.map(p=>`<p>${memberLink(p.id,p.name)}</p>`).join("")||`<p>${t("none")}</p>`}</details>`:""}
     ${blockedPeople.length?`<details id="profile-blocked" hidden><summary>${t("blockedPeople")}</summary>${blockedPeople.map(p=>
       `<p>${esc(p.name)} ${action(t("unblockPerson"),`data-block-person="${Number(p.id)}" data-value="false"`)}</p>`).join("")}</details>`:""}
     <form data-form="profile">
@@ -819,6 +955,8 @@ function adminPage() {
     <strong>${esc(u.name)}</strong><p class="muted">${esc(u.email)} · ${esc(u.area)}</p>
     ${u.admin?t("admin"):`<div class="actions">${action(t(u.blocked?"unblock":"block"),`data-account="${Number(u.id)}" data-op="block" data-value="${!u.blocked}"`)}
     ${action(t("delete"),`data-account="${Number(u.id)}" data-op="delete"`,"danger")}</div>`}</article>`).join("")}
+    <details class="card"><summary>${t("feedbackAdmin")} · ${(admin.feedback||[]).length}</summary>
+      ${(admin.feedback||[]).map(row=>`<article><p><a href="#event/${Number(row.event_id)}">#${Number(row.event_id)}</a> · ${t("welcomed")} ${t(row.welcome)} · ${t("comeAgain")} ${t(row.again)}</p><p>${esc(row.note)}</p></article>`).join("")}</details>
     <h2>${t("events")} · ${events.length}</h2>${events.map(e=>card(e,action(t("deleteEvent"),`data-event="${Number(e.id)}" data-op="delete"`,"danger"))).join("")}`;
 }
 function chatThreads() {
@@ -922,7 +1060,7 @@ setInterval(()=>{
 },15000);
 function noticesPage() {
   return `<h1>${t("notices")}</h1>${action(t("refresh"),"data-refresh")}`+
-    (noticeList.length?noticeList.map(n=>`<article class="card"><h2><a href="${n.kind==="message"?(n.sender_id?"#messages/"+Number(n.sender_id):"#messages"):"#event/"+Number(n.event_id)}">${esc(n.title)}</a></h2>
+    (noticeList.length?noticeList.map(n=>`<article class="card"><h2><a href="${n.kind==="group"?"#group/"+Number(n.event_id):n.kind==="feedback"?"#feedback/"+Number(n.event_id):n.kind==="message"?(n.sender_id?"#messages/"+Number(n.sender_id):"#messages"):"#event/"+Number(n.event_id)}">${esc(n.title)}</a></h2>
       <p>${esc(n.name)} ${t(n.kind==="message"?"messageNotice":n.kind)} · ${esc(dateLabel(n.created))}</p></article>`).join(""):`<p>${t("noNotices")}</p>`);
 }
 document.addEventListener("input",event=>{
@@ -980,7 +1118,7 @@ document.addEventListener("submit",async event=>{
       return;
     } else if (mode==="report") {
       const {type,id}=form.dataset;
-      await api("/report",{[{event:"id",person:"person",message:"message"}[type]]:Number(id),reason:data.reason});
+      await api("/report",{[{event:"id",person:"person",message:"message",group:"group"}[type]]:Number(id),reason:data.reason});
       history.back();
     } else if (mode==="reminder") {
       const e=events.find(event=>event.id===Number(form.dataset.id));
@@ -989,9 +1127,22 @@ document.addEventListener("submit",async event=>{
       if (!Number.isInteger(minutes) || minutes<0 || minutes>10080) throw new Error("invalid");
       localStorage.setItem(reminderKey(e.id),String(minutes));
       syncReminders();
+    } else if(mode==="availability") {
+      await api("/availability",{area:data.area,activity:data.activity,from:stockholmDate(data.day+"T"+data.from),until:stockholmDate(data.day+"T"+data.until)});
+      location.hash="discover";
+    } else if(mode==="group") {
+      await api("/groups/send",{id:Number(form.dataset.id),body:data.body});
+      form.reset();
+      await refreshGroup();
+      return;
+    } else if(mode==="feedback") {
+      feedbackData=await api("/feedback",{...data,id:Number(form.dataset.id),save:true});
+      return status("done");
     } else if (mode==="event") {
       const original=events.find(entry=>entry.id===Number(form.dataset.id));
       data.start=original && localDate(new Date(original.start))===data.start ? original.start : stockholmDate(data.start);
+      if(data.end) data.end=stockholmDate(data.end);
+      data.repeatCount=Number(data.repeatCount||1);
       data.quick=data.quick==="on";
       data.newcomers=data.newcomers==="on";
       data.price=Number(data.price||0);
@@ -1144,7 +1295,14 @@ document.addEventListener("click",async event=>{
   }
   button.disabled=true;
   try {
-    if ("allowReminder" in d) {
+    if(d.follow) {
+      await api("/follows",{id:Number(d.follow),enabled:d.enabled==="true"});
+    } else if("removeAvailability" in d) {
+      await api("/availability",{enabled:false});
+      location.hash="discover";
+    } else if(d.confirmAttendance) {
+      await api("/attendance",{id:Number(d.confirmAttendance)});
+    } else if ("allowReminder" in d) {
       window.HangaAndroid.allowReminders();
       return;
     } else if ("preciseReminder" in d) {
@@ -1197,6 +1355,16 @@ document.addEventListener("click",async event=>{
   finally { button.disabled=false; }
 });
 document.addEventListener("change",event=>{
+  const form=event.target.form;
+  if(event.target.name==="start" && form?.dataset.form==="event" && form.elements.end) {
+    try {
+      const input=event.target, previous=input.dataset.previous||input.defaultValue;
+      const duration=previous?Date.parse(stockholmDate(form.elements.end.value))-Date.parse(stockholmDate(previous)):7200000;
+      const start=Date.parse(stockholmDate(input.value));
+      form.elements.end.value=localDate(new Date(start+(duration>0&&duration<=7*86400000?duration:7200000)));
+      input.dataset.previous=input.value;
+    } catch {} // Keep the entered values so native form validation can highlight them.
+  }
   if (event.target.name!=="appLanguage" || !["sv","en"].includes(event.target.value)) return;
   localStorage.lang=lang=event.target.value;
   syncAlertProfile();
@@ -1205,6 +1373,7 @@ document.addEventListener("change",event=>{
 });
 setInterval(()=>{
   if (route()[0]!=="discover" || !$("results")) return;
+  if($("today-company")) $("today-company").innerHTML=todayCompany();
   refreshResults();
   if (document.visibilityState!=="hidden") loadCityCalendar()?.then(()=>{
     if ($("results")) refreshResults();

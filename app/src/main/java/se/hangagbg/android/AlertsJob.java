@@ -26,6 +26,7 @@ public final class AlertsJob extends JobService {
     static final int JOB_ID = 120;
     static final String OPEN_EVENT = "open_event";
     static final String OPEN_CHAT = "open_chat";
+    static final String OPEN_SECTION = "open_section";
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private Future<?> work;
 
@@ -87,7 +88,7 @@ public final class AlertsJob extends JobService {
             if (peer>0 && preferences.getLong("owner",0)>0) {
                 ChatNotifications.show(this,preferences.getLong("owner",0),peer,id);
             } else {
-                notifyEvent(notifications, Long.hashCode(id), eventId, peer, alert.getString("title"), label(kind,english));
+                notifyEvent(notifications, Long.hashCode(id), eventId, peer, alert.getString("title"), label(kind,english), "group".equals(kind)?"group":"feedback".equals(kind)?"feedback":"");
             }
             cursor = id;
         }
@@ -116,15 +117,15 @@ public final class AlertsJob extends JobService {
                 || event.optBoolean("cancelled") || !NeighborhoodAlerts.matches(area,event.optString("area"),event.optString("start"))) continue;
             int tag = Long.hashCode(id) ^ Integer.MIN_VALUE;
             notifyEvent(notifications, tag, id, 0, event.getString("title"),
-                english ? "New meetup in your area · " + area : "Ny träff i ditt område · " + area);
+                (english ? "New meetup in your area · " + area : "Ny träff i ditt område · " + area),"");
         }
         if (token.equals(preferences.getString("token","")) && area.equals(preferences.getString("area",""))) {
             preferences.edit().putLong("seenEvent",Math.max(0, newest)).apply();
         }
     }
 
-    private void notifyEvent(NotificationManager notifications, int tag, long eventId, long peer, String title, String text) {
-        Intent open = new Intent(this, MainActivity.class).putExtra(OPEN_EVENT, eventId).putExtra(OPEN_CHAT, peer)
+    private void notifyEvent(NotificationManager notifications, int tag, long eventId, long peer, String title, String text, String section) {
+        Intent open = new Intent(this, MainActivity.class).putExtra(OPEN_EVENT, eventId).putExtra(OPEN_CHAT, peer).putExtra(OPEN_SECTION,section)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent intent = PendingIntent.getActivity(this, tag, open,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
@@ -166,6 +167,10 @@ public final class AlertsJob extends JobService {
 
     private String label(String kind, boolean english) {
         return switch (kind) {
+            case "group" -> english ? "New group chat message" : "Nytt meddelande i gruppchatten";
+            case "attendance" -> english ? "Confirm your attendance" : "Bekräfta att du kommer";
+            case "feedback" -> english ? "How was your meetup?" : "Hur var träffen?";
+            case "following" -> english ? "New meetup from an organizer you follow" : "Ny träff från en arrangör du följer";
             case "joined" -> english ? "Someone joined your meetup" : "Någon har anmält sig";
             case "vacancy" -> english ? "A spot opened up" : "En plats har blivit ledig";
             case "reminder" -> english ? "Your meetup starts within an hour" : "Träffen börjar inom en timme";
