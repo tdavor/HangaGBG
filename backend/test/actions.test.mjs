@@ -141,7 +141,7 @@ test("registered and legacy names block normalized duplicates while member detai
   await assert.rejects(call("profile",{name:" GUEST "}),{message:"nameTaken"});
   await call("profile",{name:"Guest",bio:"Coffee and walks",languages:"Svenska, English"},1);
   const id=people[1].id;
-  assert.deepEqual(await call("member_profile",{id}),{id,name:"Guest",bio:"Coffee and walks",languages:"Svenska, English"});
+  assert.deepEqual(await call("member_profile",{id}),{id,name:"Guest",bio:"Coffee and walks",languages:"Svenska, English",following:false});
   await assert.rejects(call("member_profile",{id},null),{message:"loginRequired"});
   await call("block_person",{id:people[0].id,enabled:true},1);
   await assert.rejects(call("member_profile",{id}),{message:"missing"});
@@ -182,4 +182,104 @@ test("FCM registration can only update the signed-in user's own device",async()=
   assert.equal(registered.fcmToken,payload.fcmToken);
   await call("alerts_off",{token:device.token},1);
   await assert.rejects(call("push_register",payload,1),{message:"missing"});
+});
+
+test("weekly meetups have separate RSVPs, preserve Stockholm wall time and never reuse notice IDs",async()=>{
+  const {db,call,event,people}=await app();
+  await call("follow_change",{id:people[0].id,enabled:true},1);
+  // Simulate Firestore transaction reads, which cannot see uncommitted writes.
+  const sequence=await db.get("settings","sequence");
+  const get=db.get.bind(db),put=db.put.bind(db);
+  db.root="test";db.writes=new Map();
+  db.get=(collection,id)=>collection==="settings"&&id==="sequence"?Promise.resolve(sequence):get(collection,id);
+  db.put=(collection,id,row)=>{
+    put(collection,id,row);
+    if(collection==="settings"&&id==="sequence") db.writes.set("test/settings/sequence",{update:{fields:{last:{integerValue:String(row.last)}}}});
+  };
+  const start="2027-03-21T09:00:00.000Z";
+  const {id}=await call("create",{...event,quick:false,start,repeatCount:3,meetingNote:"Blue jacket",meetingMap:"https://maps.app.goo.gl/example"});
+  const rows=(await call("events")).filter(e=>e.series===id);
+  assert.deepEqual(rows.map(e=>e.start),[start,"2027-03-28T08:00:00.000Z","2027-04-04T08:00:00.000Z"]);
+  const notices=await db.query("notices");
+  assert.ok(notices.some(n=>n.kind==="following"));
+  assert.ok(notices.every(n=>n.id>id+2));
+  await call("join",{id,enabled:true},1);
+  assert.deepEqual((await call("events",{},1)).filter(e=>e.series===id).map(e=>e.joined),[true,false,false]);
+  await assert.rejects(call("create",{...event,quick:false,meetingMap:"javascript:alert(1)"}),{message:"invalid"});
+});
+
+test("group chat is limited to participants and respects blocks, reports and leaving",async()=>{
+  const {call,id,people}=await app();
+  await assert.rejects(call("group_messages",{id},2),{message:"forbidden"});
+  await call("join",{id,enabled:true},1);
+  await call("group_send",{id,body:"By the entrance"});
+  const [message]=await call("group_messages",{id},1);
+  assert.equal(message.body,"By the entrance");
+  assert.equal(message.email,undefined);
+  await call("group_send",{id,body:"See you"},1);
+  await call("report",{group:message.id,reason:"Test"},1);
+  assert.ok((await call("admin")).reports.some(r=>r.context.includes("By the entrance")));
+  await assert.rejects(call("report",{group:message.id,reason:"Test"},2),{message:"missing"});
+  await call("join",{id,enabled:false},1);
+  await assert.rejects(call("group_send",{id,body:"After leaving"},1),{message:"forbidden"});
+  await call("join",{id,enabled:true},1);
+  await call("block_person",{id:people[0].id,enabled:true},1);
+  await assert.rejects(call("group_messages",{id},1),{message:"missing"});
+});
+
+test("attendance and feedback prompts are idempotent and feedback stays private",async()=>{
+  const {db,call,id,event,people}=await app();
+  await call("join",{id,enabled:true},1);
+  await call("due_notices",{id},null);
+  await call("due_notices",{id},null);
+  assert.equal((await call("notices",{},1)).filter(n=>n.kind==="attendance").length,1);
+  await call("attendance",{id},1);
+  assert.equal((await call("events",{},1)).find(e=>e.id===id).confirmed,true);
+  await assert.rejects(call("attendance",{id},2),{message:"forbidden"});
+  await call("edit",{...event,id,start:new Date(Date.parse(event.start)+3600000).toISOString()});
+  assert.equal((await call("events",{},1)).find(e=>e.id===id).confirmed,false);
+  await assert.rejects(call("feedback_save",{id,welcome:"yes",again:"yes",note:"Nice"},1),{message:"past"});
+  const row=await db.get("events",id);
+  db.put("events",id,{...row,start:new Date(Date.now()-7200000).toISOString(),end:new Date(Date.now()-3600000).toISOString()});
+  await call("due_notices",{id},null);
+  await call("due_notices",{id},null);
+  assert.equal((await call("notices",{},1)).filter(n=>n.kind==="feedback").length,1);
+  await call("feedback_save",{id,welcome:"yes",again:"maybe",note:"Nice"},1);
+  assert.equal((await call("feedback_get",{id},1)).note,"Nice");
+  assert.deepEqual(await call("feedback_get",{id}),{});
+  await assert.rejects(call("feedback_get",{id},2),{message:"forbidden"});
+  await assert.rejects(call("admin",{},1),{message:"forbidden"});
+  assert.equal((await call("admin")).feedback.find(f=>f.user_id===people[1].id).note,"Nice");
+});
+
+test("availability expires at local midnight and follows respect blocking",async()=>{
+  const {db,call,people}=await app();
+  const format=new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Stockholm",year:"numeric",month:"2-digit",day:"2-digit"});
+  const day=format.format(new Date());
+  const {localInstant}=await import("../community.mjs");
+  const midnight=localInstant(new Date(Date.parse(day+"T00:00:00Z")+86400000).toISOString().slice(0,10)+"T00:00:00");
+  await call("availability_save",{area:"Centrum",activity:"walk",from:new Date().toISOString(),until:new Date(midnight).toISOString()},1);
+  const [available]=await call("availability_list");
+  assert.equal(available.user_id,people[1].id);
+  assert.equal(available.email,undefined);
+  await assert.rejects(call("availability_save",{area:"Centrum",activity:"walk",from:new Date().toISOString(),until:new Date(midnight+60000).toISOString()},1),{message:"invalid"});
+  db.put("availability",people[1].id,{...available,until:new Date(Date.now()-1).toISOString()});
+  assert.deepEqual(await call("availability_list"),[]);
+  await call("follow_change",{id:people[0].id,enabled:true},1);
+  assert.equal((await call("follow_list",{},1))[0].id,people[0].id);
+  await call("block_person",{id:people[0].id,enabled:true},1);
+  assert.deepEqual(await call("follow_list",{},1),[]);
+});
+
+test("scheduled prompt batches skip completed meetups and resume at the next one",async()=>{
+  const {db,call,id,event}=await app();
+  const {pendingPrompts}=await import('../community.mjs');
+  for(let i=0;i<6;i++) db.put('events',100+i,{...event,id:100+i,owner:1});
+  const events=await db.query('events');
+  const first=await pendingPrompts(db,events);
+  assert.equal(first.length,4);
+  for(const row of first) await call('due_notices',{id:row.id},null);
+  const next=await pendingPrompts(db,events);
+  assert.equal(next.length,3);
+  assert.ok(next.every(row=>!first.some(done=>done.id===row.id)));
 });

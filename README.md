@@ -1,4 +1,4 @@
-# Hänga Gbg 1.4.4 · Android
+# Hänga Gbg 1.5.0 · Android
 
 [**Ladda ner / Download Hänga Gbg för Android (.apk)**](https://github.com/tdavor/HangaGBG/releases/latest/download/HangaGBG.apk)
 
@@ -18,3 +18,15 @@ The idea for Hänga Gbg came from something I kept seeing on social media. Many 
 With Hänga Gbg, you can find meetups organised by other users, browse activities from the City of Gothenburg’s calendar, or organise a meetup of your own. If you find something you’d like to go to, you can share the event, invite others along, and message participants to agree on where and when to meet.
 
 A coffee, a walk, or a visit to an exhibition can be a simple first step towards getting to know someone new in Gothenburg.
+
+## Community features in 1.5.0
+
+- **Home:** Company today, neighborhood and time, automatically hidden at Stockholm midnight. Members can start a quick meetup and share it.
+- **Meetup:** participant-only group chat alongside private messages; Google Maps meeting-point link and recognition instructions; attendance confirmation during the last 24 hours. Leaving a meetup releases the place and notifies the waitlist.
+- **Create meetup:** optional weekly recurrence, up to 12 independent occurrences, preserving local Stockholm time across daylight-saving changes. Edits and cancellations affect one occurrence.
+- **Organizer profile / My account:** follow organizers and manage the followed list. Followers receive a notification when an organizer creates a meetup (one notification for a recurring series).
+- **Past meetups:** optional private feedback after the end time; only its author and the app administrator can read it. Admin feedback is under a collapsed section.
+
+Deploy the Worker using the repository's existing Cloudflare deployment. Both Wrangler configurations include a 15-minute Cron Trigger for attendance and feedback notifications (up to four meetups per invocation, with unfinished work picked up by the next run). Existing Firebase service credentials remain in Cloudflare secrets; no new secret or public Firestore access is needed. Group and community notices use the existing Android background alert polling; private chat keeps its FCM delivery. The offline demo hides community features that require an account and backend.
+
+Validation: `node --test backend/test/*.mjs`. GitHub Actions builds the Android APKs for pull requests; the existing tagged-release workflow publishes signed APKs.

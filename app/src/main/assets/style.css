@@ -43,3 +43,14 @@ header{z-index:3}
 .chat-entry + .chat-entry{margin-top:.55rem}
 .chat-entry a.action{min-height:34px;font-size:.76rem;margin-inline-start:.4rem}
 .chat-timeline{max-height:55vh;overflow:auto}
+
+.availability-list{padding-left:1.2rem;line-height:1.7;margin-bottom:0}
+.availability-list li{padding-block:.3rem}
+.availability-list small{display:block;color:var(--muted)}
+.event-participation .actions{margin-block:.5rem}
+.group-entry{padding:.7rem 0;border-bottom:1px solid var(--line)}
+.group-entry:last-child{border-bottom:0}
+.group-entry .action{font-size:.75rem;min-height:34px;margin-inline-start:.4rem}
+.availability-list li,.group-entry{overflow-wrap:anywhere}
+input,textarea,select,.grid>*{min-width:0}
+@media(max-width:480px){.grid{grid-template-columns:minmax(0,1fr)}}

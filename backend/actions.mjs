@@ -1,3 +1,4 @@
+import {communityAction,eventExtras,notifyFollowers,weeklyStart,sendDueNotices} from "./community.mjs";
 const eq = (field,value) => [field,"EQUAL",value];
 const fail = name => {throw new Error(name);};
 const now = () => new Date().toISOString();
@@ -15,7 +16,8 @@ const integer = (value,min=1,max=Number.MAX_SAFE_INTEGER) => {
   return value;
 };
 async function nextIds(db, count=1) {
-  const last = (await db.get("settings","sequence"))?.last || 0;
+  const pending=db.writes?.get(db.root+"/settings/sequence")?.update?.fields?.last?.integerValue;
+  const last = pending!==undefined?Number(pending):(await db.get("settings","sequence"))?.last || 0;
   db.put("settings","sequence",{last:last+count});
   return last+1;
 }
@@ -53,7 +55,7 @@ function eventData(p, old) {
   return {title:text(p.title,120,1), description:text(p.description,3000),category,mood,
     area:text(p.area,100,1),place:text(p.place,180,1),start:new Date(start).toISOString(),
     price:integer(p.price,0,100000),capacity:integer(p.capacity,1,5000),source,
-    quick:p.quick===true,newcomers:p.newcomers===true};
+    quick:p.quick===true,newcomers:p.newcomers===true,...eventExtras(p,old)};
 }
 const sha = async input => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(input))),
   byte=>byte.toString(16).padStart(2,"0")).join("");
@@ -100,7 +102,7 @@ async function eventList(db, me) {
     if (!owner || owner.deleted || (!personal && (e.hidden || owner.blocked)) ||
         (!personal && e.cancelled && !plan?.joined && !plan?.saved && !plan?.waitlisted)) return [];
     return [{...e,organizer:owner.name,count:e.count||0,joined:!!plan?.joined,saved:!!(plan?.saved || (e.cancelled && plan?.waitlisted)),
-      waitlisted:!e.cancelled && !!plan?.waitlisted,placeAvailable:(e.count||0)<e.capacity}];
+      confirmed:plan?.confirmedStart===e.start,waitlisted:!e.cancelled && !!plan?.waitlisted,placeAvailable:(e.count||0)<e.capacity}];
   }).sort((a,b)=>a.start.localeCompare(b.start)||a.id-b.id);
 }
 
@@ -124,8 +126,9 @@ async function messages(db,id,chat=false) {
   });
 }
 
-export const reads = new Set(["events","me","registration","participants","messages","notices","admin","block_list","poll","member_profile","chat_inbox"]);
+export const reads = new Set(["events","me","registration","participants","messages","notices","admin","block_list","poll","member_profile","chat_inbox","availability_list","follow_list","group_messages","feedback_get"]);
 export async function action(db, name, p, identity, env) {
+  if(name==="due_notices") {if(identity!==null) fail("forbidden");await sendDueNotices(db,notices,integer(p.id));return {};}
   if (name==="registration") return {registration:(await db.get("settings","app"))?.registration!==false};
   if (name==="poll") {
     if (!/^[a-f0-9-]{72}$/.test(p.token||"")) fail("forbidden");
@@ -185,13 +188,15 @@ export async function action(db, name, p, identity, env) {
     db.put("profiles",uid,profile);
     return publicProfile(profile);
   }
+  const community=await communityAction(db,name,p,me,{text,integer,nextIds,notices});
+  if(community!==null) return community;
   if (name==="member_profile") {
     const id=integer(p.id);
     const [member,outgoing,incoming]=await Promise.all([
       db.get("profiles",id),db.get("blocks",planKey(uid,id)),db.get("blocks",planKey(id,uid))
     ]);
     if (!member || member.deleted || member.blocked || outgoing || incoming) fail("missing");
-    return {id,name:member.name,bio:member.bio||"",languages:member.languages||""};
+    return {id,name:member.name,bio:member.bio||"",languages:member.languages||"",following:!!await db.get("follows",planKey(uid,id))};
   }
   if (name==="messages") return messages(db,uid);
   if (name==="chat_inbox") {
@@ -253,9 +258,9 @@ export async function action(db, name, p, identity, env) {
   }
   if (name==="admin") {
     if (!me.admin) fail("forbidden");
-    const [users,reports,settings] = await Promise.all([db.query("profiles",[],descending),
-      db.query("reports",[],descending,200),db.get("settings","app")]);
-    return {registration:settings?.registration!==false,users:users.filter(u=>!u.deleted || u.uid).map(u=>u.deleted ? {id:u.id,name:"Pending deletion",blocked:true} : {...publicProfile(u),admin:u.admin || u.uid===env.ADMIN_UID}),reports};
+    const [users,reports,settings,feedback] = await Promise.all([db.query("profiles",[],descending),
+      db.query("reports",[],descending,200),db.get("settings","app"),db.query("feedback",[],["created","DESCENDING"],100)]);
+    return {registration:settings?.registration!==false,users:users.filter(u=>!u.deleted || u.uid).map(u=>u.deleted ? {id:u.id,name:"Pending deletion",blocked:true} : {...publicProfile(u),admin:u.admin || u.uid===env.ADMIN_UID}),reports,feedback};
   }
   if (name==="admin_settings" || name==="resolve_report") {
     if (!me.admin) fail("forbidden");
@@ -295,6 +300,14 @@ export async function action(db, name, p, identity, env) {
         db.query("reports",[eq("reporter",target.id)]),db.query("reports",[eq("subject",target.id)]),
         db.query("chat_reads",[eq("owner",target.id)]),db.query("chat_reads",[eq("peer",target.id)])
       ]);
+      const additional=await Promise.all([
+        db.query("follows",[eq("follower",target.id)]),db.query("follows",[eq("organizer",target.id)]),
+        db.query("feedback",[eq("user_id",target.id)]),db.query("group_messages",[eq("sender",target.id)])
+      ]);
+      db.remove("availability",target.id);
+      for(const row of [...additional[0],...additional[1]]) db.remove("follows",planKey(row.follower,row.organizer));
+      for(const row of additional[2]) db.remove("feedback",planKey(row.event_id,row.user_id));
+      for(const row of additional[3]) db.remove("group_messages",row.id);
       for (const m of [...sent,...received]) db.remove("messages",m.id);
       for (const marker of [...readBy,...readAbout]) db.remove("chat_reads",planKey(marker.owner,marker.peer));
       for (const e of owned) db.remove("events",e.id);
@@ -323,9 +336,18 @@ export async function action(db, name, p, identity, env) {
   }
   if (name==="create") {
     const data = eventData(p);
-    const id = await nextIds(db);
-    db.put("events",id,{...data,id,owner:uid,count:0,hidden:false,cancelled:false});
-    return {id};
+    const repeat=integer(p.repeatCount??1,1,12);
+    if(data.quick&&repeat>1) fail("invalid");
+    const first=await nextIds(db,repeat);
+    const duration=Date.parse(data.end)-Date.parse(data.start);
+    for(let index=0;index<repeat;index++) {
+      const start=weeklyStart(data.start,index);
+      const event={...data,id:first+index,owner:uid,count:0,hidden:false,cancelled:false,start,
+        end:new Date(Date.parse(start)+duration).toISOString(),series:repeat>1?first:null};
+      db.put("events",event.id,event);
+      if(index===0) await notifyFollowers(db,event,notices);
+    }
+    return {id:first};
   }
   if (name==="report") return report(db,p,me);
   return eventAction(db,name,p,me);
@@ -335,7 +357,14 @@ async function report(db,p,me) {
   const reason = text(p.reason,500,1);
   const uid = me.id;
   let subject, context, event_id=null, message_id=null;
-  if (p.message!==undefined) {
+  if(p.group!==undefined) {
+    message_id=integer(p.group);
+    const m=await db.get("group_messages",message_id);
+    const event=m&&await db.get("events",m.event_id);
+    const plan=event&&await db.get("plans",planKey(event.id,uid));
+    if(!event||!(event.owner===uid||plan?.joined)) fail("missing");
+    subject=m.sender;context=m.body.slice(0,500);event_id=event.id;
+  } else if (p.message!==undefined) {
     message_id=integer(p.message);
     const m=await db.get("messages",message_id);
     if (!m || ![m.sender,m.recipient].includes(uid)) fail("missing");
@@ -395,7 +424,7 @@ async function eventAction(db,name,p,me) {
       const data=eventData(p,e);
       if (data.capacity<count) fail("full");
       const alerts=[];
-      if (["start","place","area"].some(field=>data[field]!==e[field])) {
+      if (["start","place","area","meetingMap","meetingNote"].some(field=>data[field]!==e[field])) {
         alerts.push(...joined.filter(plan=>plan.user_id!==uid).map(plan=>[plan.user_id,"changed"]));
       }
       if (count>=e.capacity && data.capacity>count && visible && Date.parse(data.start)>Date.now()) {
