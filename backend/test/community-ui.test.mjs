@@ -54,3 +54,34 @@ test('private conversation exposes personal message and history deletion with ex
     assert.ok(run('t("deleteMessageConfirm")').length>30);
   }
 });
+
+test('own availability always has edit and delete actions on home and a prefilled edit form',()=>{
+  const run=ui();
+  run(`availability=Array.from({length:6},(_,i)=>({user_id:i+2,name:'Other '+i,area:'Centrum',activity:'fika',from:new Date().toISOString(),until:new Date(Date.now()+600000).toISOString()}));
+    availability.push({user_id:'1',name:'Davor',area:'Tuve',activity:'walk',from:new Date().toISOString(),until:new Date(Date.now()+600000).toISOString()});`);
+  for(const lang of ['sv','en']) {
+    const home=run(`lang='${lang}';todayCompany()`);
+    assert.match(home,/my-availability/);assert.match(home,/data-remove-availability/);assert.match(home,/href="#availability"/);
+    const edit=run('availabilityPage()');
+    assert.match(edit,/value="Tuve" selected/);assert.match(edit,/value="walk" selected/);assert.match(edit,/data-remove-availability/);
+  }
+  const other=run('availability=availability.filter(e=>Number(e.user_id)!==1);todayCompany()');
+  assert.doesNotMatch(other,/data-remove-availability/);
+});
+
+test('availability save and delete refresh local state even when already on the discover route',async()=>{
+  const run=ui();
+  run(`location.hash='#discover';globalThis.operations=[];globalThis.renderCount=0;
+    render=()=>{renderCount++};status=key=>{globalThis.lastStatus=key};globalThis.confirm=()=>true;
+    globalThis.rows=[{user_id:2,name:'Anna',area:'Tuve',activity:'walk',from:new Date().toISOString(),until:new Date(Date.now()+600000).toISOString()}];
+    api=async(path,data)=>{operations.push({path,data});if(data?.enabled===false)rows=rows.filter(e=>e.user_id!==1);else if(data)rows=[...rows.filter(e=>e.user_id!==1),{...data,user_id:1,name:'Davor'}];return rows};`);
+  await run(`saveAvailability({area:'Centrum',activity:'fika',day:localDate(new Date()).slice(0,10),from:'18:00',until:'00:00'})`);
+  assert.equal(run('ownAvailability().area'),'Centrum');
+  assert.equal(run('lastStatus'),'availabilitySaved');
+  assert.equal(run('localDate(new Date(operations[0].data.until)).slice(11)'),'00:00');
+  await run('removeAvailability()');
+  assert.equal(run('availability.length'),1);
+  assert.equal(run('ownAvailability()'),undefined);
+  assert.equal(run('renderCount'),2);
+  assert.equal(run('lastStatus'),'availabilityRemoved');
+});

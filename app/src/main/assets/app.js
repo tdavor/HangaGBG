@@ -6,6 +6,9 @@ const copy = {
   deleteMessageConfirm:["Radera meddelandet för dig? Det finns kvar hos den andra personen.","Delete this message for you? It remains visible to the other person."],
   retainedChatHelp:["Din historik finns kvar även om träffen raderas. För att skicka nya meddelanden behöver ni fortfarande delta i samma träff.","Your history stays even if the meetup is deleted. Sending new messages still requires a shared meetup."],
 
+  editAvailability:["Ändra min tillgänglighet","Edit my availability"], myAvailability:["Din tillgänglighet idag","Your availability today"],
+  availabilitySaved:["Din tillgänglighet har sparats.","Your availability has been saved."], availabilityRemoved:["Din tillgänglighet har tagits bort.","Your availability has been removed."],
+  removeAvailabilityConfirm:["Ta bort din tillgänglighet för idag?","Remove your availability for today?"],
   todayCompany:["Sällskap idag","Company today"], availableToday:["Jag vill ses idag","I'm available today"], viewAvailability:["Visa alla tillgängliga","View everyone available"],
   availabilityTime:["Tillgänglig från","Available from"], availableUntil:["Till","Until"],
   removeAvailability:["Ta bort min tillgänglighet","Remove my availability"],
@@ -629,26 +632,52 @@ function authPage(mode) {
     <div class="actions">${register?"":action(t("forgotPassword"),"data-forgot-password")} ${link(register?"login":"register",register?"#auth":"#auth/register")}
     </div>`;
 }
+function ownAvailability() {
+  return availability.find(entry=>Number(entry.user_id)===Number(user?.id)&&Date.parse(entry.until)>Date.now());
+}
+function availabilitySummary(entry) {
+  return `${esc(t(entry.activity))} · ${esc(entry.area)}<small>${esc(localDate(new Date(entry.from)).slice(11))}–${esc(localDate(new Date(entry.until)).slice(11))}</small>`;
+}
 function todayCompany(all=false) {
-  const current=availability.filter(entry=>Date.parse(entry.until)>Date.now());
-  return `<div class="rows between"><h2>${t("todayCompany")}</h2>${!all?link("availableToday","#availability"):""}</div>
+  const own=ownAvailability();
+  const current=availability.filter(entry=>Number(entry.user_id)!==Number(user?.id)&&Date.parse(entry.until)>Date.now());
+  return `<div class="rows between"><h2>${t("todayCompany")}</h2>${!all&&!own?link("availableToday","#availability"):""}</div>
+    ${own&&!all?`<section class="my-availability"><strong>${t("myAvailability")}</strong><p>${availabilitySummary(own)}</p>
+      <div class="actions">${link("editAvailability","#availability")}${action(t("removeAvailability"),"data-remove-availability","danger")}</div></section>`:""}
     ${current.length?`<ul class="availability-list">${(all?current:current.slice(0,3)).map(entry=>`<li>
-      ${memberLink(entry.user_id,entry.name)} · ${esc(t(entry.activity))} · ${esc(entry.area)}
-      <small>${esc(localDate(new Date(entry.from)).slice(11))}–${esc(localDate(new Date(entry.until)).slice(11))}</small>
-      </li>`).join("")}</ul>${!all&&current.length>3?link("viewAvailability","#availability"):""}`:`<p class="muted">${t("todayEmpty")}</p>`}`;
+      ${memberLink(entry.user_id,entry.name)} · ${availabilitySummary(entry)}
+      </li>`).join("")}</ul>${!all&&current.length>3?link("viewAvailability","#availability"):""}`:!own?`<p class="muted">${t("todayEmpty")}</p>`:""}`;
 }
 function availabilityPage() {
-  const own=availability.find(entry=>entry.user_id===user.id);
+  const own=ownAvailability();
   const date=localDate(new Date()).slice(0,10);
-  const from=own?localDate(new Date(own.from)).slice(11):localDate(new Date(Date.now()+60000)).slice(11);
-  return `<h1>${t("todayCompany")}</h1><p>${t("availabilityHelp")}</p><form data-form="availability">
+  const from=own?localDate(new Date(own.from)).slice(11):localDate(new Date()).slice(11);
+  return `<h1>${t(own?"editAvailability":"availableToday")}</h1><p>${t("availabilityHelp")}</p><form data-form="availability">
     ${areaSelect(own?.area||user.area)}
     ${select("activity","activity",["fika","walk","other"].map(v=>[v,t(v)]),own?.activity||"fika")}
     <div class="grid">${field("availabilityTime","from",from,"time","required")}${field("availableUntil","until",own?localDate(new Date(own.until)).slice(11):"23:59","time","required")}</div>
     <input name="day" type="hidden" value="${date}">
-    <button class="primary">${t("save")}</button></form>
-    ${own?action(t("removeAvailability"),"data-remove-availability","danger"):""}
+    <div class="actions"><button class="primary">${t("save")}</button>
+      ${own?action(t("removeAvailability"),"data-remove-availability","danger"):""}</div></form>
     <section class="card">${todayCompany(true)}</section><div class="actions">${link("quick","#create/quick","primary")}</div>`;
+}
+async function saveAvailability(data) {
+  const endDay=data.until==="00:00"&&data.from!=="00:00"?
+    new Date(Date.parse(data.day+"T00:00:00Z")+86400000).toISOString().slice(0,10):data.day;
+  await api("/availability",{area:data.area,activity:data.activity,from:stockholmDate(data.day+"T"+data.from),until:stockholmDate(endDay+"T"+data.until)});
+  availability=await api("/availability");
+  location.hash="discover";
+  render();
+  status("availabilitySaved");
+}
+async function removeAvailability() {
+  if(!confirm(t("removeAvailabilityConfirm"))) return;
+  await api("/availability",{enabled:false});
+  availability=await api("/availability");
+  if(ownAvailability()) throw new Error("server");
+  location.hash="discover";
+  render();
+  status("availabilityRemoved");
 }
 function groupContent() {
   const rows=groupEventId===Number(route()[1])?groupRows:[];
@@ -1139,8 +1168,8 @@ document.addEventListener("submit",async event=>{
       localStorage.setItem(reminderKey(e.id),String(minutes));
       syncReminders();
     } else if(mode==="availability") {
-      await api("/availability",{area:data.area,activity:data.activity,from:stockholmDate(data.day+"T"+data.from),until:stockholmDate(data.day+"T"+data.until)});
-      location.hash="discover";
+      await saveAvailability(data);
+      return;
     } else if(mode==="group") {
       await api("/groups/send",{id:Number(form.dataset.id),body:data.body});
       form.reset();
@@ -1316,8 +1345,8 @@ document.addEventListener("click",async event=>{
     } else if(d.follow) {
       await api("/follows",{id:Number(d.follow),enabled:d.enabled==="true"});
     } else if("removeAvailability" in d) {
-      await api("/availability",{enabled:false});
-      location.hash="discover";
+      await removeAvailability();
+      return;
     } else if(d.confirmAttendance) {
       await api("/attendance",{id:Number(d.confirmAttendance)});
     } else if ("allowReminder" in d) {
