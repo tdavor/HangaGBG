@@ -920,6 +920,30 @@ function reminderForm(event) {
       ${window.HangaAndroid?.preciseReminderAccessNeeded()?action(t("preciseReminder"),"data-precise-reminder"):""}
     </div></form>`;
 }
+let socialRequest;
+async function refreshSocialPage() {
+  const [page,id]=route(),eventId=Number(id),version=refreshId;
+  const current=events.find(row=>row.id===eventId);
+  if(demo||!user||socialRequest||!(page==="again"||(page==="event"&&current?.minPeople&&current.proposalPhase!=="active"))) return;
+  const owner=user.id;
+  socialRequest=page==="again"?api("/again",{id:eventId}):api("/events");
+  try {
+    const rows=await socialRequest;
+    if(user?.id!==owner||version!==refreshId||route().join("/")!==page+"/"+id) return;
+    if(page==="again") {
+      if(againEventId===eventId&&JSON.stringify(againRows)===JSON.stringify(rows)) return;
+      againRows=rows;againEventId=eventId;
+    } else {
+      const next=rows.find(row=>row.id===eventId);
+      if(JSON.stringify(current)===JSON.stringify(next)) return;
+      events=events.filter(row=>row.id!==eventId);
+      if(next) events.push(next);
+      syncReminders();
+    }
+    render();
+  } finally {socialRequest=undefined;}
+}
+setInterval(()=>{if(document.visibilityState!=="hidden") void refreshSocialPage().catch(()=>{});},15000);
 function proposalPanel(e) {
   if(!e.minPeople||e.proposalPhase==="active") return "";
   const own=user?.id===e.owner,canJoin=user&&!e.cancelled&&!e.hidden&&Date.parse(e.start)>Date.now();

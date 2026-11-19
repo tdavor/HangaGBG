@@ -137,3 +137,14 @@ test('meet-again is a contextual post-event screen with private selection and mu
   let html=run('againPage(10)');assert.match(html,/data-again="10"/);assert.doesNotMatch(html,/#event\/10\/2/);
   html=run('againRows[0].matched=true;againPage(10)');assert.match(html,/#event\/10\/2/);assert.doesNotMatch(html,/data-again=/);
 });
+
+test('proposal progress and a reciprocal meet-again choice refresh on the current screen',async()=>{
+  const run=ui();
+  run(`location.hash='#event/10';events[0]={...events[0],minPeople:3,proposalPhase:'collecting',joined:false};globalThis.rendered=0;render=()=>{rendered++};api=async()=>[{...events[0],interestCount:2,proposalPhase:'confirming'}]`);
+  await run('refreshSocialPage()');
+  assert.equal(run('events[0].proposalPhase'),'confirming');
+  run(`location.hash='#again/10';againEventId=10;againRows=[{id:2,name:'Anna',selected:true,matched:false}];api=async()=>[{id:2,name:'Anna',selected:true,matched:true}]`);
+  await run('refreshSocialPage()');
+  assert.equal(run('againRows[0].matched'),true);
+  assert.equal(run('rendered'),2);
+});
