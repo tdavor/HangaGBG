@@ -19,6 +19,7 @@ async function peerAllowed(db,a,b) {
 }
 export async function socialAction(db,name,p,me,{integer,notices}) {
   if(!['interest','proposal_confirm','again_list','again_change'].includes(name)) return null;
+  if(['interest','again_change'].includes(name)&&typeof p.enabled!=='boolean') fail('invalid');
   const id=integer(p.id),uid=me.id,e=await db.get('events',id);
   if(!e||e.hidden||e.cancelled) fail('missing');
   await peerAllowed(db,uid,e.owner);

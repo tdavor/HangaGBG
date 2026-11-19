@@ -402,6 +402,7 @@ test('meet-again choices remain private until mutual, cannot expose rejections a
   await assert.rejects(call('again_list',{id},1),{message:'forbidden'});
   const row=await db.get('events',id);
   db.put('events',id,{...row,start:new Date(Date.now()-7200000).toISOString(),end:new Date(Date.now()-3600000).toISOString()});
+  await assert.rejects(call('again_change',{id,peer:people[0].id},1),{message:'invalid'});
   await call('again_change',{id,peer:people[0].id,enabled:true},1);
   let hostView=await call('again_list',{id});
   assert.deepEqual(hostView.find(p=>p.id===people[1].id),{id:people[1].id,name:'guest',selected:false,matched:false});
