@@ -11,6 +11,23 @@ I Hänga Gbg kan du hitta träffar som andra ordnar, bläddra bland aktiviteter 
 
 En fika, en promenad eller ett besök på en utställning kan vara ett enkelt första steg till att lära känna någon ny i Göteborg.
 
+## Det här gör HängaGBG speciellt
+
+### 1. Du behöver inte gå ensam
+Hitta sällskap till en konsert, utställning eller annan aktivitet. Med **”Söker sällskap”** kan du bjuda med andra, bestämma en mötesplats och gå tillsammans – utan att själv behöva arrangera evenemanget.
+
+### 2. Små träffar nära dig
+En fika för två till fyra personer, en kort promenad eller en spelkväll i ditt område. Tydlig information om tid, plats och antal deltagare gör det lättare att ta första steget.
+
+### 3. Sällskap idag
+Allt behöver inte planeras flera veckor i förväg. Visa när och var du vill ses, till exempel: *”Fika på Hisingen idag mellan 17 och 19, upp till fyra personer.”* Andra kan föreslå en konkret träff.
+
+### 4. En tryggare första träff
+Det ska kännas enkelt att komma själv. Arrangören kan berätta hur deltagarna tas emot, var gruppen möts och hur man känner igen varandra. Små detaljer kan göra stor skillnad.
+
+### 5. Från en träff till en gemenskap
+Ett trevligt möte kan bli början på något återkommande. Deltagarna kan planera nästa träff och steg för steg bygga en egen liten gemenskap – som en söndagspromenad på Ramberget eller en återkommande fika i kvarteret.
+
 English
 
 The idea for Hänga Gbg came from something I kept seeing on social media. Many people in Gothenburg feel lonely and post looking for someone to grab a coffee with, go for a walk with, or simply hang out with. After seeing posts like these again and again, I built the app to make it easier for people to find company and meet in person.
@@ -18,6 +35,23 @@ The idea for Hänga Gbg came from something I kept seeing on social media. Many 
 With Hänga Gbg, you can find meetups organised by other users, browse activities from the City of Gothenburg’s calendar, or organise a meetup of your own. If you find something you’d like to go to, you can share the event, invite others along, and message participants to agree on where and when to meet.
 
 A coffee, a walk, or a visit to an exhibition can be a simple first step towards getting to know someone new in Gothenburg.
+
+## What makes HängaGBG special
+
+### 1. You don’t have to go alone
+Find company for a concert, exhibition or another activity. With **“Looking for company”**, you can invite others, agree on a meeting point and go together—without organising the event yourself.
+
+### 2. Small meetups close to home
+Coffee with two to four people, a short walk or a board game evening in your neighbourhood. Clear details about the time, place and group size make taking the first step easier.
+
+### 3. Company today
+Not everything needs to be planned weeks ahead. Share when and where you’d like to meet, for example: *“Coffee in Hisingen today between 5 and 7 pm, up to four people.”* Others can suggest a specific meetup.
+
+### 4. A more welcoming first meetup
+Coming alone should feel comfortable. Organisers can explain how participants will be welcomed, where the group will meet and how to recognise each other. Small details can make a big difference.
+
+### 5. From one meetup to a community
+A good first meeting can become something regular. Participants can plan their next meetup and gradually build a small community—whether it’s a Sunday walk on Ramberget or a regular coffee in the neighbourhood.
 
 ## Community features in 1.5.0
 
