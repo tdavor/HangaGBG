@@ -1,4 +1,4 @@
-# Hänga Gbg 1.5.3 · Android
+# Hänga Gbg 1.6.0 · Android
 
 [**Ladda ner / Download Hänga Gbg för Android (.apk)**](https://github.com/tdavor/HangaGBG/releases/latest/download/HangaGBG.apk)
 
@@ -60,4 +60,14 @@ A good first meeting can become something regular. Participants can plan their n
 - **Create meetup:** optional weekly recurrence, up to 12 independent occurrences, preserving local Stockholm time across daylight-saving changes. Edits and cancellations affect one occurrence.
 - **Organizer profile / My account:** follow organizers and manage the followed list. Followers receive a notification when an organizer creates a meetup (one notification for a recurring series).
 - **Past meetups:** optional private feedback after the end time; only its author and the app administrator can read it. Admin feedback is under a collapsed section.
+
+## Social features in 1.6.0
+
+| Feature | Where to find it |
+| --- | --- |
+| Meetup idea with a minimum group size | Choose an idea at the top of Create meetup. Interested members receive confirmation invitations when the minimum is reached. The organizer must confirm, and the minimum includes the organizer. Pending ideas have up to 20 guest places and cannot be recurring. |
+| Meetup atmosphere | Choose quiet, conversation or a shared activity beside the category when creating a meetup; filter by atmosphere in discovery. |
+| Meet again / Ses igen | After an event ends, open it from My plans and choose Meet again beside feedback. Choices are private until both participants select each other. A mutual choice also makes you friends, so you can keep messaging and invite each other to new meetups. Choices can be withdrawn before a match. |
+| Friends / Vänner | Open Messages and choose Friends. Send requests from a past participant’s profile or an existing conversation partner’s profile. Accept or decline requests, start a direct chat and invite a friend to an upcoming meetup you organize or have joined. Friendships survive deletion of the original meetup. Removing a friend keeps previous messages; blocking stops contact. |
+| Walks with a small goal | Expand the walk ideas section in Create meetup: viewpoint, photography, a new café or neighbourhood discoveries. Templates pre-fill editable titles, instructions and a goal. The organizer chooses the actual meeting place and route. |
 

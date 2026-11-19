@@ -1,4 +1,6 @@
 import {communityAction,eventExtras,notifyFollowers,weeklyStart,sendDueNotices} from "./community.mjs";
+import {socialFields,socialAction,resetPendingProposal,withdrawIdeaMember} from "./social.mjs";
+import {friendAction,friendKey,validFriendNotices,sharedMeetup} from "./friends.mjs";
 const eq = (field,value) => [field,"EQUAL",value];
 const fail = name => {throw new Error(name);};
 const now = () => new Date().toISOString();
@@ -55,7 +57,7 @@ function eventData(p, old) {
   return {title:text(p.title,120,1), description:text(p.description,3000),category,mood,
     area:text(p.area,100,1),place:text(p.place,180,1),start:new Date(start).toISOString(),
     price:integer(p.price,0,100000),capacity:integer(p.capacity,1,5000),source,
-    quick:p.quick===true,newcomers:p.newcomers===true,...eventExtras(p,old)};
+    quick:p.quick===true,newcomers:p.newcomers===true,...eventExtras(p,old),...socialFields(p,old)};
 }
 const sha = async input => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(input))),
   byte=>byte.toString(16).padStart(2,"0")).join("");
@@ -72,7 +74,7 @@ async function notices(db, e, entries) {
   for (const [kind,{recipients,name}] of byKind) {
     const unique=[...new Set(recipients)];
     for (let offset=0;offset<unique.length;offset+=1000) {
-      batches.push({event_id:e.id,kind,name,title:e.title,created:now(),recipients:unique.slice(offset,offset+1000)});
+      batches.push({event_id:e.id,...(e.friendPeer?{peer_id:e.friendPeer}:{}),kind,name,title:e.title,created:now(),recipients:unique.slice(offset,offset+1000)});
     }
   }
   let id = await nextIds(db,batches.length);
@@ -102,6 +104,7 @@ async function eventList(db, me) {
     if (!owner || owner.deleted || (!personal && (e.hidden || owner.blocked)) ||
         (!personal && e.cancelled && !plan?.joined && !plan?.saved && !plan?.waitlisted)) return [];
     return [{...e,organizer:owner.name,count:e.count||0,joined:!!plan?.joined,saved:!!(plan?.saved || (e.cancelled && plan?.waitlisted)),
+      interested:!!plan?.interested,proposalConfirmed:e.owner===id?!!e.ownerConfirmed:!!plan?.proposalConfirmed,
       confirmed:plan?.confirmedStart===e.start,waitlisted:!e.cancelled && !!plan?.waitlisted,placeAvailable:(e.count||0)<e.capacity}];
   }).sort((a,b)=>a.start.localeCompare(b.start)||a.id-b.id);
 }
@@ -125,11 +128,11 @@ async function messages(db,id,chat=false) {
     const recipient = people.get(String(m.recipient));
     const event = events.get(String(m.event_id));
     if (!sender || !recipient || sender.deleted || recipient.deleted || (chat && (sender.blocked || recipient.blocked)) || denied.has(m.sender) || denied.has(m.recipient)) return [];
-    return [{...m,title:m.title||event?.title||"",sender_name:sender.name,recipient_name:recipient.name}];
+    return [{...m,...(m.invite_event?{invite_available:!!event&&!event.hidden&&!event.cancelled}:{}),title:m.title||event?.title||"",sender_name:sender.name,recipient_name:recipient.name}];
   });
 }
 
-export const reads = new Set(["events","me","registration","participants","messages","notices","admin","block_list","poll","member_profile","chat_inbox","availability_list","follow_list","group_messages","feedback_get"]);
+export const reads = new Set(["events","me","registration","participants","messages","notices","admin","block_list","poll","member_profile","chat_inbox","availability_list","follow_list","group_messages","feedback_get","again_list","friend_list","friend_status","chat_peer"]);
 export async function action(db, name, p, identity, env) {
   if(name==="due_notices") {if(identity!==null) fail("forbidden");await sendDueNotices(db,notices,integer(p.id));return {};}
   if (name==="registration") return {registration:(await db.get("settings","app"))?.registration!==false};
@@ -147,7 +150,9 @@ export async function action(db, name, p, identity, env) {
       db.getMany("profiles",senders),db.getMany("blocks",senders.flatMap(sender=>[planKey(user.id,sender),planKey(sender,user.id)]))
     ]);
     const visibleMessages=new Set((await messages(db,user.id,true)).map(m=>m.id));
-    return alerts.map(({id,kind,event_id,title,sender_id,message_id})=>{
+    const friendNotices=await validFriendNotices(db,user.id,alerts);
+    return alerts.map(({id,kind,event_id,title,sender_id,message_id,peer_id})=>{
+      if(["friendRequest","friendAccepted"].includes(kind)) return {id,kind:friendNotices.has(id)?kind:"message_skipped",event_id:0,title,peer_id};
       if (kind==="message") {
         const sender=sender_id||legacy.get(String(message_id||id-1))?.sender;
         const profile=people.get(String(sender));
@@ -194,6 +199,10 @@ export async function action(db, name, p, identity, env) {
   }
   const community=await communityAction(db,name,p,me,{text,integer,nextIds,notices});
   if(community!==null) return community;
+  const friend=await friendAction(db,name,p,me,{integer,notices,writeMessage});
+  if(friend!==null) return friend;
+  const social=await socialAction(db,name,p,me,{integer,notices});
+  if(social!==null) return social;
   if (name==="member_profile") {
     const id=integer(p.id);
     const [member,outgoing,incoming]=await Promise.all([
@@ -234,22 +243,26 @@ export async function action(db, name, p, identity, env) {
   if (name==="chat_send") {
     const peer=integer(p.peer);
     await messagingPeer(db,uid,peer);
+    if((await db.get("friendships",friendKey(uid,peer)))?.status==="accepted") return writeMessage(db,me,peer,0,"Hänga Gbg",p.body);
     const [sent,received]=await Promise.all([
       db.query("messages",[eq("sender",uid),eq("recipient",peer)]),
       db.query("messages",[eq("sender",peer),eq("recipient",uid)])
     ]);
-    const eventIds=new Set([...sent,...received].sort(sortNewest).map(m=>m.event_id));
+    const eventIds=new Set([...sent,...received].sort(sortNewest).map(m=>m.event_id).filter(id=>Number.isSafeInteger(id)&&id>0));
     for (const id of eventIds) {
       try { return await eventAction(db,"message",{id,recipient:peer,body:p.body},me); }
       catch (error) { if (!["forbidden","missing","cancelled"].includes(error.message)) throw error; }
     }
+    const shared=await sharedMeetup(db,uid,peer);
+    if(shared) return eventAction(db,"message",{id:shared.id,recipient:peer,body:p.body},me);
     fail("forbidden");
   }
   if (name==="notices") {
     const rows=await readNotices(db,uid);
     const visibleMessages=new Set((await messages(db,uid,true)).map(m=>m.id));
+    const friendNotices=await validFriendNotices(db,uid,rows);
     const events=await db.getMany("events",rows.map(row=>row.event_id));
-    return rows.filter(row=>row.kind==="message"?visibleMessages.has(row.message_id||row.id-1):row.kind==="cancelled" || events.has(String(row.event_id))).map(({recipients,...row})=>row);
+    return rows.filter(row=>["friendRequest","friendAccepted"].includes(row.kind)?friendNotices.has(row.id):row.kind==="message"?visibleMessages.has(row.message_id||row.id-1):row.kind==="cancelled" || events.has(String(row.event_id))).map(({recipients,...row})=>row);
   }
   if (name==="alerts_on") {
     const cursor = (await db.query("notices",[byRecipient(uid)],descending,1))[0]?.id||0;
@@ -301,12 +314,13 @@ export async function action(db, name, p, identity, env) {
     const blocked = deleting || p.blocked===true;
     if (blocked) {
       const plans = await db.query("plans",[eq("user_id",target.id)]);
-      const attended = await db.getMany("events",plans.filter(plan=>plan.joined).map(plan=>plan.event_id));
+      const attended = await db.getMany("events",plans.filter(plan=>plan.joined||plan.interested).map(plan=>plan.event_id));
       for (const plan of plans) {
         const e = attended.get(String(plan.event_id));
+        if(e&&plan.interested&&e.minPeople&&e.proposalPhase!=="active") await withdrawIdeaMember(db,e,target.id);
         if (e && plan.joined) db.put("events",e.id,{...e,count:Math.max(0,(e.count||0)-1)});
         if (deleting) db.remove("plans",planKey(plan.event_id,target.id));
-        else if (plan.joined) db.put("plans",planKey(plan.event_id,target.id),{...plan,joined:false});
+        else if (plan.joined||plan.interested) db.put("plans",planKey(plan.event_id,target.id),{...plan,joined:false,interested:false,proposalConfirmed:false});
       }
     }
     if (deleting) {
@@ -320,13 +334,19 @@ export async function action(db, name, p, identity, env) {
       const additional=await Promise.all([
         db.query("follows",[eq("follower",target.id)]),db.query("follows",[eq("organizer",target.id)]),
         db.query("feedback",[eq("user_id",target.id)]),db.query("group_messages",[eq("sender",target.id)]),
-        db.query("chat_hidden",[eq("owner",target.id)]),db.query("chat_hidden",[eq("peer",target.id)])
+        db.query("chat_hidden",[eq("owner",target.id)]),db.query("chat_hidden",[eq("peer",target.id)]),
+        db.query("again_choices",[eq("user_id",target.id)]),db.query("again_choices",[eq("target",target.id)]),
+        db.query("again_matches",[["users","ARRAY_CONTAINS",target.id]]),db.query("again_pairs",[["users","ARRAY_CONTAINS",target.id]]),db.query("friendships",[["users","ARRAY_CONTAINS",target.id]])
       ]);
       db.remove("availability",target.id);
       for(const row of [...additional[0],...additional[1]]) db.remove("follows",planKey(row.follower,row.organizer));
       for(const row of additional[2]) db.remove("feedback",planKey(row.event_id,row.user_id));
       for(const row of additional[3]) db.remove("group_messages",row.id);
       for(const row of [...additional[4],...additional[5]]) db.remove("chat_hidden",planKey(row.owner,row.message_id));
+      for(const row of [...additional[6],...additional[7]]) db.remove("again_choices",row.id);
+      for(const row of additional[8]) db.remove("again_matches",row.id);
+      for(const row of additional[9]) db.remove("again_pairs",row.id);
+      for(const row of additional[10]) db.remove("friendships",row.id);
       for (const m of [...sent,...received]) db.remove("messages",m.id);
       for (const marker of [...readBy,...readAbout]) db.remove("chat_reads",planKey(marker.owner,marker.peer));
       for (const e of owned) db.remove("events",e.id);
@@ -349,20 +369,20 @@ export async function action(db, name, p, identity, env) {
     const id = integer(p.id);
     if (id===uid) fail("invalid");
     if (!(await db.get("profiles",id))?.name) fail("missing");
-    if (p.enabled===true) db.put("blocks",planKey(uid,id),{blocker:uid,blocked:id});
+    if (p.enabled===true) {db.put("blocks",planKey(uid,id),{blocker:uid,blocked:id});db.remove("friendships",friendKey(uid,id));}
     else db.remove("blocks",planKey(uid,id));
     return {};
   }
   if (name==="create") {
     const data = eventData(p);
     const repeat=integer(p.repeatCount??1,1,12);
-    if(data.quick&&repeat>1) fail("invalid");
+    if((data.quick||data.minPeople>0)&&repeat>1) fail("invalid");
     const first=await nextIds(db,repeat);
     const duration=Date.parse(data.end)-Date.parse(data.start);
     for(let index=0;index<repeat;index++) {
       const start=weeklyStart(data.start,index);
       const event={...data,id:first+index,owner:uid,count:0,hidden:false,cancelled:false,start,
-        end:new Date(Date.parse(start)+duration).toISOString(),series:repeat>1?first:null};
+        end:new Date(Date.parse(start)+duration).toISOString(),...(data.minPeople?{proposalPhase:"collecting",interestCount:0,ownerConfirmed:false}:{}),series:repeat>1?first:null};
       db.put("events",event.id,event);
       if(index===0) await notifyFollowers(db,event,notices);
     }
@@ -432,6 +452,7 @@ async function eventAction(db,name,p,me) {
     }
     const plans=await db.query("plans",[eq("event_id",id)]);
     const joined=plans.filter(plan=>plan.joined);
+    const subscribers=plans.filter(plan=>plan.joined||plan.interested);
     const waiting=plans.filter(plan=>plan.waitlisted);
     if (name==="participants") {
       const users=await db.getMany("profiles",[e.owner,...joined.map(plan=>plan.user_id)]);
@@ -441,15 +462,15 @@ async function eventAction(db,name,p,me) {
     if (name==="edit") {
       if (e.cancelled) fail("cancelled");
       const data=eventData(p,e);
-      if (data.capacity<count) fail("full");
+      if (data.capacity<count || (e.minPeople&&e.proposalPhase!=="active"&&data.capacity<plans.filter(plan=>plan.interested).length)) fail("full");
       const alerts=[];
       if (["start","place","area","meetingMap","meetingNote"].some(field=>data[field]!==e[field])) {
-        alerts.push(...joined.filter(plan=>plan.user_id!==uid).map(plan=>[plan.user_id,"changed"]));
+        alerts.push(...subscribers.filter(plan=>plan.user_id!==uid).map(plan=>[plan.user_id,"changed"]));
       }
       if (count>=e.capacity && data.capacity>count && visible && Date.parse(data.start)>Date.now()) {
         alerts.push(...waiting.map(plan=>[plan.user_id,"vacancy"]));
       }
-      const updated={...e,...data};
+      const updated=await resetPendingProposal(db,e,{...e,...data},plans);
       db.put("events",id,updated);
       await notices(db,updated,alerts);
       return {id};
@@ -457,14 +478,14 @@ async function eventAction(db,name,p,me) {
     if (name==="delete_event") {
       db.remove("events",id);
       if (!e.cancelled && upcoming) {
-        await notices(db,e,[...joined,...waiting].filter(plan=>plan.user_id!==uid)
+        await notices(db,e,[...subscribers,...waiting].filter(plan=>plan.user_id!==uid)
           .map(plan=>[plan.user_id,"cancelled"]));
       }
       return {removedEvent:id};
     }
     if (!e.cancelled) {
       db.put("events",id,{...e,cancelled:true});
-      await notices(db,e,[...joined.filter(plan=>plan.user_id!==uid),...waiting].map(plan=>[plan.user_id,"cancelled"]));
+      await notices(db,e,[...subscribers.filter(plan=>plan.user_id!==uid),...waiting].map(plan=>[plan.user_id,"cancelled"]));
     }
     return {};
   }
@@ -474,6 +495,7 @@ async function eventAction(db,name,p,me) {
     const enabled=p.enabled===true;
     const alerts=[];
     if (enabled && e.cancelled) fail("cancelled");
+    if(["join","waitlist"].includes(name)&&enabled&&e.minPeople&&e.proposalPhase!=="active") fail("forbidden");
     if (name==="join" && enabled!==plan.joined) {
       if (enabled) {
         if (!visible || !upcoming) fail("past");
@@ -518,11 +540,11 @@ async function messagingPeer(db,uid,recipient) {
   if (blocks.size) fail("messageBlocked");
 }
 
-async function writeMessage(db,me,recipient,event_id,title,value) {
+async function writeMessage(db,me,recipient,event_id,title,value,metadata={}) {
   const body=text(value,1500,1);
   const msg=await nextIds(db,2);
   const created=now();
-  db.put("messages",msg,{id:msg,event_id,title,sender:me.id,recipient,body,created});
+  db.put("messages",msg,{...metadata,id:msg,event_id,title,sender:me.id,recipient,body,created});
   db.put("notices",msg+1,{id:msg+1,event_id,message_id:msg,kind:"message",sender_id:me.id,name:me.name,title:title||me.name,created,recipients:[recipient]});
   return {pushChat:{owner:recipient,peer:me.id,notice:msg+1}};
 }

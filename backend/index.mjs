@@ -47,7 +47,7 @@ async function deleteAuth(env,token,uid,idToken) {
 }
 
 export async function removeEventRelations(db,id) {
-  for (const collection of ["plans","group_messages","feedback"]) {
+  for (const collection of ["plans","group_messages","feedback","again_choices","again_matches","again_pairs"]) {
     while (true) {
       const rows=await db.query(collection,[["event_id","EQUAL",id]],null,200);
       if (!rows.length) break;

@@ -1,10 +1,49 @@
 "use strict";
 
 const copy = {
+  friends:["Vänner","Friends"], friendsHelp:["Håll kontakten efter träffen. Vänskap är ömsesidig och finns kvar även om träffen raderas.","Stay in touch after a meetup. Friendship is mutual and stays even if the meetup is deleted."],
+  addFriend:["Lägg till vän","Add friend"], friendPending:["Vänförfrågan skickad","Friend request sent"],
+  friendRequest:["Ny vänförfrågan","New friend request"], friendAccepted:["Vänförfrågan accepterad","Friend request accepted"],
+  friendRequests:["Vänförfrågningar","Friend requests"], friendOutgoing:["Skickade förfrågningar","Sent requests"],
+  acceptFriend:["Acceptera","Accept"], declineFriend:["Avböj","Decline"], withdrawFriend:["Ta tillbaka förfrågan","Withdraw request"],
+  removeFriend:["Ta bort vän","Remove friend"], manageFriend:["Hantera vänskap","Manage friendship"],
+  removeFriendConfirm:["Ta bort vänskapen? Era tidigare meddelanden finns kvar. Använd blockering om du vill stoppa kontakt.","Remove this friendship? Your previous messages stay. Use blocking if you want to stop contact."],
+  friendsEmpty:["Inga vänner ännu. Öppna en tidigare deltagares profil och skicka en vänförfrågan, eller välj Ses igen efter en träff.","No friends yet. Open a past participant's profile and send a friend request, or choose Meet again after a meetup."],
+  pastParticipants:["Hitta tidigare deltagare","Find past participants"], inviteFriend:["Bjud med på en träff","Invite to a meetup"],
+  chooseInvite:["Vilken träff vill du bjuda med din vän till?","Which meetup would you like to invite your friend to?"],
+  inviteHelp:["Välj en kommande träff som du ordnar eller är anmäld till. Din vän får en privat inbjudan och väljer själv om hen vill anmäla sig.","Choose an upcoming meetup you organize or have joined. Your friend receives a private invitation and chooses whether to join."],
+  sendInvite:["Skicka inbjudan","Send invitation"], inviteSent:["Inbjudan har skickats i er konversation.","The invitation has been sent in your conversation."],
+  noInviteEvents:["Du har inga kommande träffar att bjuda med till. Anmäl dig till en träff eller skapa en egen först.","You have no upcoming meetups to invite someone to. Join a meetup or create one first."],
+  inviteUnavailable:["Den här träffen är inte längre tillgänglig.","This meetup is no longer available."],
+  firstFriendMessage:["Skriv ett meddelande för att börja prata.","Write a message to start chatting."],
+  friendChatHelp:["Ni är vänner och kan fortsätta skriva även när tidigare träffar har raderats.","You are friends and can keep messaging even when earlier meetups have been deleted."],
+
+  meetupMode:["Vad vill du skapa?","What would you like to create?"], standardMeetup:["En bestämd träff","A planned meetup"],
+  ideaMode:["Ett förslag som behöver fler","An idea needing more people"],
+  proposal:["Förslag","Meetup idea"], minPeople:["Minsta antal personer, inklusive dig","Minimum people, including you"],
+  proposalHelp:["Intresse är ingen anmälan. När minimiantalet är uppnått får alla en inbjudan att bekräfta. Träffen blir bestämd när arrangören och tillräckligt många deltagare tackat ja. Antal platser nedan avser gäster utöver dig, högst 20.","Interest is not an RSVP. Once the minimum is reached, everyone is invited to confirm. The meetup is confirmed when the organizer and enough participants accept. The capacity below counts guests in addition to you, up to 20."],
+  proposalExpired:["Förslaget blev inte bekräftat i tid","The idea was not confirmed before its start"],
+  proposalCollecting:["Vi samlar intresse","Gathering interest"], proposalReady:["Tillräckligt många är intresserade – bekräfta","Enough people are interested – please confirm"],
+  proposalActive:["Nu blir träffen av!","The meetup is confirmed!"], interested:["Jag är intresserad","I'm interested"], withdrawInterest:["Ta bort mitt intresse","Withdraw my interest"],
+  interestCount:["intresserade, inklusive arrangören","interested, including the organizer"], confirmProposal:["Ja, jag kommer om träffen blir av","Yes, I'll come if the meetup goes ahead"],
+  proposalConfirmed:["Du har tackat ja. Vi inväntar fler bekräftelser.","You've accepted. Waiting for the remaining confirmations."],
+  confirmedPeople:["bekräftade, inklusive arrangören","confirmed, including the organizer"], proposalPlans:["Förslag jag är intresserad av","Meetup ideas I'm interested in"],
+  proposalFixed:["Minimiantalet gäller detta förslag och kan inte ändras efter publicering.","The minimum for this idea cannot be changed after publication."],
+  atmosphereHelp:["Välj hur ni vill umgås. Det är en förväntan på träffen, inte en etikett på dig.","Choose how you'd like to spend time together. This describes the meetup, not you."],
+  atmosphereFilter:["Vilken stämning passar dig?","What kind of meetup suits you?"],
+  again:["Ses igen","Meet again"], againHelp:["Välj privat vilka du gärna träffar igen. Bara ett ömsesidigt val visas – ingen ser ett nej eller ett obesvarat val. Vid ett ömsesidigt val blir ni också vänner och kan fortsätta skriva. Du kan ändra ditt val tills ni matchar.","Privately choose who you'd like to meet again. Only mutual choices are revealed; no one sees a rejection or an unanswered choice. A mutual choice also connects you as friends so you can keep messaging. You can change your choice until you match."],
+  againSelect:["Jag vill gärna ses igen","I'd like to meet again"], againSelected:["Valt privat – ångra","Selected privately – undo"],
+  againMatch:["Ni vill båda ses igen","You both want to meet again"], againEmpty:["Inga andra deltagare att välja just nu.","There are no other participants to choose right now."],
+  planNext:["Planera nästa träff","Plan your next meetup"], afterMeetup:["Efter träffen","After the meetup"],
+  walkIdeas:["Promenader med ett litet mål","Walks with a small goal"], walkIdeasHelp:["Ett gemensamt mål ger något att prata om. Välj en idé och anpassa plats, tid och beskrivning.","A shared goal gives you something to talk about. Pick an idea and adapt the location, time and description."],
+  walkGoal:["Promenadens mål","The walk's goal"],
+  walk_view:["Hitta en fin utsikt","Find a great view"], walk_photo:["Fotopromenad vid vattnet","Photo walk by the water"],
+  walk_cafe:["Upptäck ett nytt kafé","Discover a new café"], walk_discover:["Hitta kvarterets gömda pärlor","Find the neighbourhood's hidden gems"],
+
   deleteConversation:["Radera konversation","Delete conversation"], deleteMessage:["Radera för mig","Delete for me"],
   deleteConversationConfirm:["Radera tidigare meddelanden i den här konversationen för dig? Den andra personen behåller sin historik. Nya meddelanden kan visas igen.","Delete the current conversation history for you? The other person keeps their history. New messages can appear again."],
   deleteMessageConfirm:["Radera meddelandet för dig? Det finns kvar hos den andra personen.","Delete this message for you? It remains visible to the other person."],
-  retainedChatHelp:["Din historik finns kvar även om träffen raderas. För att skicka nya meddelanden behöver ni fortfarande delta i samma träff.","Your history stays even if the meetup is deleted. Sending new messages still requires a shared meetup."],
+  retainedChatHelp:["Din historik finns kvar även om träffen raderas. Vänner kan fortsätta skriva direkt. Andra konversationer kräver en gemensam träff.","Your history stays even if the meetup is deleted. Friends can keep messaging directly. Other conversations require a shared meetup."],
 
   editAvailability:["Ändra min tillgänglighet","Edit my availability"], myAvailability:["Din tillgänglighet idag","Your availability today"],
   availabilitySaved:["Din tillgänglighet har sparats.","Your availability has been saved."], availabilityRemoved:["Din tillgänglighet har tagits bort.","Your availability has been removed."],
@@ -95,7 +134,7 @@ const copy = {
   intro:["Hitta något att göra i kväll eller bjud in andra till en egen träff.","Find something to do tonight or invite others to your own meetup."],
   search:["Till exempel: promenad i Haga","For example: a walk in Haga"], keyword:["Vad är du sugen på?","What do you feel like doing?"],
   all:["Alla","All"], today:["I dag","Today"], upcoming:["Kommande","Upcoming"],
-  tonight:["Ikväll","Tonight"], anyArea:["Alla områden","All areas"], category:["Kategori","Category"], mood:["Stämning","Mood"],
+  tonight:["Ikväll","Tonight"], anyArea:["Alla områden","All areas"], category:["Kategori","Category"], mood:["Så vill vi umgås","How we want to spend time"],
   area:["Område","Area"], other:["Övrigt","Other"], customArea:["Skriv ditt område","Enter your area"], none:["Inga träffar hittades.","No events found."],
   noPlans:["Du har inga sparade träffar eller anmälningar än.","You have no saved events or RSVPs yet."],
   own:["Mina egna träffar","My meetups"], saved:["Sparade och anmälda","Saved and joined"], savePlan:["Spara","Save"],
@@ -150,7 +189,7 @@ const copy = {
   messageDemo:["Demomeddelanden stannar på den här enheten.","Demo messages stay on this device."],
   fika:["Fika","Coffee"], food:["Mat & dryck","Food & drink"], music:["Musik","Music"], games:["Spel","Games"],
   sport:["Sport","Sports"], nature:["Natur","Outdoors"], culture:["Kultur","Culture"], nightlife:["Nattliv","Nightlife"],
-  chill:["Lugn","Chill"], social:["Social","Social"], active:["Aktiv","Active"]
+  chill:["Lugnt och kravlöst","Quiet and relaxed"], social:["Prata och lära känna","Talk and get to know people"], active:["Göra något tillsammans","Do something together"]
 };
 const areas = [
   "Centrum","Lorensberg","Vasastaden","Johanneberg","Haga","Linné","Järntorget","Masthugget","Majorna","Kungsladugård",
@@ -182,7 +221,8 @@ let token = demo ? localStorage.hangaDemoToken || "" : hangaCloud.signedIn ? "fi
 let pendingEmail = "";
 let blockedPeople=[];
 let memberProfile = null;
-let availability=[],followingPeople=[],groupRows=[],groupEventId=0,feedbackData={};
+let availability=[],followingPeople=[],groupRows=[],groupEventId=0,feedbackData={},againRows=[],againEventId=0;
+let friends=[],friendContext=null,chatPeer=null;
 let user = null, events = [], messageList = [], noticeList = [], admin = null;
 let cityItems = [], cityRequest, cityLoadedAt = 0, cityUnavailable = false, cityExpiryTimer;
 const cityId = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
@@ -236,7 +276,7 @@ function loadCityCalendar(force=false) {
 }
 const findCity = id => cityItems.find(event=>event.id===id && !isPast(event));
 
-const defaultFilters = { query:"", area:"", category:"", period:"upcoming", eventSource:"" };
+const defaultFilters = { query:"", area:"", category:"", period:"upcoming", eventSource:"", mood:"" };
 let filters = {...defaultFilters};
 let renderedResults;
 const PAGE_SIZE = 5;
@@ -295,7 +335,7 @@ function reminderMinutes(id) {
   return saved===null?DEFAULT_REMINDER_MINUTES:Number(saved);
 }
 function eligibleReminder(event) {
-  return user && event.joined && !event.hidden && !event.cancelled && Date.parse(event.start)>Date.now();
+  return user && event.joined && (!event.minPeople||event.proposalPhase==="active") && !event.hidden && !event.cancelled && Date.parse(event.start)>Date.now();
 }
 function syncReminders(items=events) {
   if (!window.HangaAndroid) return;
@@ -363,7 +403,7 @@ function syncAlertProfile() {
 window.hangaSyncAlerts=syncAlertProfile;
 function session(result) {
   messageList=[];
-  availability=[];followingPeople=[];groupRows=[];groupEventId=0;feedbackData={};
+  availability=[];followingPeople=[];groupRows=[];groupEventId=0;feedbackData={};againRows=[];againEventId=0;friends=[];friendContext=null;chatPeer=null;
   token=result?.token || "";
   user=result?.user || null;
   if (demo) {
@@ -511,17 +551,27 @@ async function load() {
       if(page==="discover" && $("today-company")) $("today-company").innerHTML=todayCompany();
     }
     if (!demo && user && page==="profile") followingPeople=await api("/follows");
+    if(!demo&&user&&page==="friends") {
+      const owner=user.id,entries=await api("/friends");
+      if(version!==refreshId||user?.id!==owner)return;
+      friends=entries;
+    }
     if (!demo && user && page==="group") {
       const rows=await api("/groups",{id:Number(detail)});
       if(version!==refreshId) return;
       groupRows=rows;groupEventId=Number(detail);
+    }
+    if (!demo && user && page==="again") {
+      const rows=await api("/again",{id:Number(detail)});
+      if(version!==refreshId) return;
+      againRows=rows;againEventId=Number(detail);
     }
     if (!demo && user && page==="feedback") {
       const value=await api("/feedback",{id:Number(detail)});
       if(version!==refreshId) return;
       feedbackData={...value,event_id:Number(detail)};
     }
-    if ((demo || base) && ["discover","plans","event","create","admin","city","group","feedback"].includes(page)) {
+    if ((demo || base) && ["discover","plans","event","create","admin","city","group","feedback","again","friends"].includes(page)) {
       const current=await api("/events");
       if (version!==refreshId) return;
       events=current;
@@ -541,9 +591,11 @@ async function load() {
     }
     if (page==="member" && user) {
       memberProfile=null;
-      const member=await api("/members/"+Number(detail));
-      if (version!==refreshId) return;
-      memberProfile=member;
+      const owner=user.id,member=await api("/members/"+Number(detail));
+      if (version!==refreshId||user?.id!==owner) return;
+      const context=demo||Number(detail)===owner?null:await api("/friends/status",{peer:Number(detail)});
+      if(version!==refreshId||user?.id!==owner)return;
+      memberProfile=member;friendContext=context;
     }
     if (page!=="messages" && user) window.hangaRefreshChats();
     if (page==="profile" && user) blockedPeople=await api("/blocks");
@@ -592,10 +644,13 @@ function render() {
   else if (page==="availability") html=availabilityPage();
   else if (page==="group") html=groupPage(Number(id));
   else if (page==="feedback") html=feedbackPage(Number(id));
+  else if (page==="again") html=againPage(Number(id));
+  else if(page==="friends") html=id==="invite"?friendInvitePage(Number(recipient)):friendsPage();
   else if (page==="create") {
     const draft=user.admin&&id==="draft"?starterMeetups[Number(recipient)]:null;
     const repeat=id==="repeat"?events.find(item=>item.id===Number(recipient)&&item.owner===user.id&&isPast(item)):null;
-    html=id==="repeat"&&!repeat?`<h1>${t("missing")}</h1>`:
+    const walkDraft=id==="walk"?walkTemplates()[recipient]:null;
+    html=id==="walk"?(walkDraft?eventForm(null,walkDraft):`<p>${t("missing")}</p>`):id==="repeat"&&!repeat?`<h1>${t("missing")}</h1>`:
       id==="city"?(findCity(recipient)?eventForm(null,null,null,findCity(recipient)):`<h1>${t("missing")}</h1>`):
       id==="quick"?quickForm():eventForm(events.find(item=>item.id===Number(id)),draft,repeat);
   }
@@ -738,7 +793,7 @@ function feedbackPage(id) {
   const e=events.find(e=>e.id===id);
   if(!e||!(e.joined||e.owner===user.id)||Date.parse(e.end||e.start)>Date.now()) return `<p>${t("forbidden")}</p>`;
   const value=feedbackData.event_id===id?feedbackData:{};
-  return `<h1>${t("feedback")}</h1><p>${esc(e.title)}</p><p class="muted">${t("feedbackHelp")}</p>
+  return `<h1>${t("feedback")}</h1><p>${esc(e.title)}</p><p class="muted">${t("feedbackHelp")}</p><div class="actions">${link("again",`#again/${id}`)}</div>
     <form data-form="feedback" data-id="${id}">
       ${select("welcomed","welcome",[["",t("chooseAnswer")],...["yes","partly","no"].map(v=>[v,t(v)])],value.welcome||"")}
       ${select("comeAgain","again",[["",t("chooseAnswer")],...["yes","maybe","no"].map(v=>[v,t(v)])],value.again||"")}
@@ -754,6 +809,7 @@ function discoverPage() {
       <div class="wide">${field("keyword","query",filters.query,"search",`placeholder="${t("search")}"`)}</div>
       ${select("area","area",[["",t("anyArea")],...areas.map(x=>[x,x]),["other",t("other")]],filters.area)}
       ${select("category","category",[["",t("all")],...cats.map(x=>[x,t(x)])],filters.category)}
+      ${select("atmosphereFilter","mood",[["",t("all")],...moods.filter(Boolean).map(x=>[x,t(x)])],filters.mood)}
       ${demo?"":select("eventSource","eventSource",[["",t("all")],["community",t("communityEvents")],["city",t("cityCalendar")]],filters.eventSource)}
       ${select("events","period",["upcoming","today","tonight"].map(x=>[x,t(x)]),filters.period)}
       <label class="check wide"><input type="checkbox" name="newcomers" ${filters.newcomers?"checked":""}> ${t("newcomers")}</label>
@@ -774,7 +830,7 @@ function focusEventList() {
 }
 function hasFilters() {
   return Boolean(filters.query.trim() || filters.area || filters.category ||
-    filters.period!=="upcoming" || filters.newcomers || filters.eventSource);
+    filters.period!=="upcoming" || filters.newcomers || filters.eventSource || filters.mood);
 }
 function results() {
   const term=filters.query.trim().toLowerCase();
@@ -784,6 +840,7 @@ function results() {
     const date=localDate(new Date(event.start));
     if (event.hidden || event.cancelled || (filters.newcomers && !event.newcomers) || isPast(event) || !hasArea(event,filters.area)) return false;
     if (filters.category && event.category!==filters.category) return false;
+    if (filters.mood && event.mood!==filters.mood) return false;
     if (filters.period!=="upcoming" && !date.startsWith(today)
         && !(event.city && date<today && localDate(new Date(event.end)).slice(0,10)>=today)) return false;
     if (filters.period==="tonight" && date.slice(11,13)<"17") return false;
@@ -850,11 +907,11 @@ function card(e,controls="") {
   return `<article class="card"><div class="rows between"><span class="pill">${esc(t(e.category))}</span><span class="pill">${price(e)}</span></div>
     ${eventBadges(e)}<h2><a href="#event/${Number(e.id)}">${esc(eventTitle(e))}</a></h2>
     <p class="muted">${esc(dateLabel(e.start))} · ${eventAddress(e)}</p>
-    <p>${Number(e.count)}/${Number(e.capacity)} ${t("attendees").toLowerCase()}${e.hidden?" · "+t("hidden"):""}</p>${controls}</article>`;
+    <p>${e.minPeople&&e.proposalPhase!=="active"?`${Number(e.interestCount||0)+1}/${Number(e.minPeople)} ${t("interestCount")}`:`${Number(e.count)}/${Number(e.capacity)} ${t("attendees").toLowerCase()}`}${e.hidden?" · "+t("hidden"):""}</p>${e.mood?`<span class="pill">${t(e.mood)}</span>`:""}${e.walkGoal?`<span class="pill"> · ${t("walk_"+e.walkGoal)}</span>`:""}${controls}</article>`;
 }
 function eventBadges(e) {
   return `<div class="rows">${["quick","newcomers","cancelled"].filter(key=>e[key]).map(key=>
-    `<span class="pill">${t(key==="quick"?"quickBadge":key)}</span>`).join("")}</div>`;
+    `<span class="pill">${t(key==="quick"?"quickBadge":key)}</span>`).join("")}${e.minPeople?`<span class="pill">${t(e.proposalPhase==="active"?"proposalActive":Date.parse(e.start)<=Date.now()?"proposalExpired":"proposal")}</span>`:""}</div>`;
 }
 function safetyActions(person, type, id) {
   if (!user || Number(person)===user.id) return "";
@@ -889,6 +946,62 @@ function reminderForm(event) {
       ${window.HangaAndroid?.preciseReminderAccessNeeded()?action(t("preciseReminder"),"data-precise-reminder"):""}
     </div></form>`;
 }
+let socialRequest;
+async function refreshSocialPage() {
+  const [page,id]=route(),hash=route().join("/"),eventId=Number(id),version=refreshId;
+  const current=events.find(row=>row.id===eventId);
+  if(demo||!user||socialRequest||!(page==="again"||(page==="friends"&&!id)||(page==="event"&&current?.minPeople&&current.proposalPhase!=="active"))) return;
+  const owner=user.id;
+  socialRequest=page==="again"?api("/again",{id:eventId}):page==="friends"?api("/friends"):api("/events");
+  try {
+    const rows=await socialRequest;
+    if(user?.id!==owner||version!==refreshId||route().join("/")!==hash) return;
+    if(page==="again") {
+      if(againEventId===eventId&&JSON.stringify(againRows)===JSON.stringify(rows)) return;
+      againRows=rows;againEventId=eventId;
+    } else if(page==="friends") {
+      if(JSON.stringify(friends)===JSON.stringify(rows)) return;
+      friends=rows;
+    } else {
+      const next=rows.find(row=>row.id===eventId);
+      if(JSON.stringify(current)===JSON.stringify(next)) return;
+      events=events.filter(row=>row.id!==eventId);
+      if(next) events.push(next);
+      syncReminders();
+    }
+    render();
+  } finally {socialRequest=undefined;}
+}
+setInterval(()=>{if(document.visibilityState!=="hidden") void refreshSocialPage().catch(()=>{});},15000);
+function proposalPanel(e) {
+  if(!e.minPeople||e.proposalPhase==="active") return "";
+  const own=user?.id===e.owner,canJoin=user&&!e.cancelled&&!e.hidden&&Date.parse(e.start)>Date.now();
+  return `<section class="card proposal-panel"><h2>${t(Date.parse(e.start)<=Date.now()?"proposalExpired":e.proposalPhase==="confirming"?"proposalReady":"proposalCollecting")}</h2>
+    <p>${Number(e.interestCount||0)+1}/${Number(e.minPeople)} ${t("interestCount")}</p><p class="muted">${t("proposalHelp")}</p>
+    ${e.proposalPhase==="confirming"?`<p>${Number(e.count||0)+Number(!!e.ownerConfirmed)}/${Number(e.minPeople)} ${t("confirmedPeople")}</p>`:""}
+    <div class="actions">${canJoin&&!own?action(t(e.interested?"withdrawInterest":"interested"),`data-interest="${e.id}" data-enabled="${!e.interested}"`,e.interested?"":"primary"):""}
+    ${canJoin&&e.proposalPhase==="confirming"&&(own||e.interested)?e.proposalConfirmed?`<p class="pill">${t("proposalConfirmed")}</p>`:action(t("confirmProposal"),`data-confirm-proposal="${e.id}"`,"primary"):""}</div></section>`;
+}
+function againPage(id) {
+  const e=events.find(row=>row.id===id);
+  if(!e||!(e.joined||e.owner===user.id)||Date.parse(e.end||e.start)>Date.now()) return `<p>${t("forbidden")}</p>`;
+  const rows=againEventId===id?againRows:[];
+  return `<h1>${t("again")}</h1><p>${esc(e.title)}</p><p class="muted">${t("againHelp")}</p>
+    ${rows.map(person=>`<section class="card"><h2>${memberLink(person.id,person.name)}</h2>
+      ${person.matched?`<p class="pill">${t("againMatch")}</p><div class="actions">${link("message",`#messages/${person.id}`,"primary")}${link("inviteFriend",`#friends/invite/${person.id}`)}</div>`:
+        action(t(person.selected?"againSelected":"againSelect"),`data-again="${id}" data-peer="${person.id}" data-enabled="${!person.selected}"`,person.selected?"":"primary")}</section>`).join("")||`<p>${t("againEmpty")}</p>`}`;
+}
+function walkTemplates() {
+  const descriptions={
+    view:["Gå tillsammans och hitta en utsiktsplats. Stanna och berätta vad ni gillar med utsikten. Bestäm startpunkt och en enkel väg som passar gruppen.","Walk together to a viewpoint. Stop and share what you like about the view. Agree on a starting point and an easy route that suits the group."],
+    photo:["Ta en promenad vid vattnet och leta efter tre fotomotiv: en detalj, en reflektion och något oväntat. Mobilkamera räcker. Fråga innan du fotograferar någon.","Walk by the water and find three photo subjects: a detail, a reflection and something unexpected. A phone camera is enough. Ask before photographing anyone."],
+    cafe:["Promenera till ett kafé som är nytt för gruppen. Välj tillsammans och kontrollera öppettider. Var och en betalar sitt eget fika; det går också bra att bara promenera.","Walk to a café that's new to the group. Choose together and check opening hours. Everyone pays for their own refreshments; joining just the walk is fine too."],
+    discover:["Upptäck tre små saker i kvarteret: ett konstverk, en intressant byggnad och en plats ni vill besöka igen. Dela era upptäckter under promenaden.","Discover three small things in the neighbourhood: an artwork, an interesting building and a place you'd like to visit again. Share your discoveries as you walk."]};
+  return Object.fromEntries(Object.entries(descriptions).map(([goal,description])=>[goal,{title:copy['walk_'+goal],description,walkGoal:goal,category:'walk',capacity:5}]));
+}
+function walkPicker() {
+  return `<details class="card"><summary>${t("walkIdeas")}</summary><p class="muted">${t("walkIdeasHelp")}</p><div class="actions">${Object.keys(walkTemplates()).map(goal=>link('walk_'+goal,'#create/walk/'+goal)).join('')}</div></details>`;
+}
 function eventPage(e, recipient) {
   if (!e) return `<h1>${t("missing")}</h1>`;
   const manager = user&&(e.owner===user.id||user.admin);
@@ -899,21 +1012,22 @@ function eventPage(e, recipient) {
   const member=user&&(e.joined||e.owner===user.id);
   const command=(name,op,enabled,klass="")=>action(t(name),`data-event="${Number(e.id)}" data-op="${op}" data-value="${enabled}"`,klass);
   const open=!e.cancelled && !e.hidden && new Date(e.start)>new Date();
-  const joinButton=e.joined?command("leave","join",false):
+  const pending=e.minPeople&&e.proposalPhase!=="active";
+  const joinButton=pending?"":e.joined?command("leave","join",false):
     !open?"":e.count<e.capacity?command("join","join",true,"primary"):
     !e.waitlisted?command("waitlist","waitlist",true,"primary"):"";
-  const waitingButton=e.waitlisted?command("leaveWaitlist","waitlist",false):"";
+  const waitingButton=!pending&&e.waitlisted?command("leaveWaitlist","waitlist",false):"";
   return `<h1>${esc(eventTitle(e))}</h1>${eventBadges(e)}<p class="pill">${esc(t(e.category))} · ${price(e)}${e.mood?" · "+esc(t(e.mood)):""}</p>
     <p>${esc(dateLabel(e.start))} · ${eventAddress(e)}</p><p>${t("organizer")} · ${memberLink(e.owner,e.organizer)}</p>
-    <p>${Number(e.count)}/${Number(e.capacity)} ${t("attendees").toLowerCase()}</p><p>${esc(e.description)}</p>
+    ${!pending?`<p>${Number(e.count)}/${Number(e.capacity)} ${t("attendees").toLowerCase()}</p>`:""}
+    ${e.walkGoal?`<p class="pill">${t("walk_"+e.walkGoal)}</p>`:""}<p>${esc(e.description)}</p>${proposalPanel(e)}
     <div class="actions">${link("map",endpoint)}${typeof e.source==="string"&&e.source.startsWith("https://")?link("source",e.source):""}
     ${!e.cancelled?action(t("share"),`data-share="${Number(e.id)}"`):""}
     ${user?`${joinButton}${waitingButton}${demo&&e.waitlisted&&e.count>=e.capacity?command("simulateVacancy","simulate",true):""}${command(e.saved?"removePlan":"savePlan","save",!e.saved)}`:open?link("login","#auth","primary"):""}</div>
     ${e.meetingNote||e.meetingMap?`<section class="card"><h2>${t("meetingPoint")}</h2><p>${esc(e.meetingNote||"")}</p>${e.meetingMap?link("map",e.meetingMap):""}</section>`:""}
     ${e.series?`<p class="muted">${t("repeated")}</p>`:""}
-    ${!demo&&member&&!e.cancelled?`<section class="card event-participation"><h2>${t("plans")}</h2>
-      <div class="actions">${link("groupChat",`#group/${e.id}`,"primary")}
-      ${Date.parse(e.end||e.start)<=Date.now()?link("feedback",`#feedback/${e.id}`):""}</div>
+    ${!demo&&member&&!e.cancelled&&!pending?`<section class="card event-participation"><h2>${t(Date.parse(e.end||e.start)<=Date.now()?"afterMeetup":"plans")}</h2>
+      <div class="actions">${Date.parse(e.end||e.start)<=Date.now()?`${link("again",`#again/${e.id}`,"primary")}${link("feedback",`#feedback/${e.id}`)}${link("groupChat",`#group/${e.id}`)}`:link("groupChat",`#group/${e.id}`,"primary")}</div>
       ${e.joined&&open&&Date.parse(e.start)-Date.now()<=86400000?`<p>${t("confirmationHelp")}</p>
         ${e.confirmed?`<p class="pill">${t("confirmed")}</p>`:action(t("confirmAttendance"),`data-confirm-attendance="${e.id}"`,"primary")}
         ${command("leave","join",false)}`:""}</section>`:""}
@@ -925,11 +1039,14 @@ function eventForm(e,draft,repeat,city) {
   const values=e||repeat|| (city&&{title:city.title,place:city.place,source:city.source,category:"other"});
   const cityStart=city?new Date(Math.max(Date.parse(city.start),Date.now()+60000)):null;
   if (e && e.owner!==user.id && !user.admin) return `<h1>${t("forbidden")}</h1>`;
-  return `<h1>${t(city?"arrangeCityMeetup":repeat?"repeat":e?"edit":"create")}</h1>${draft?`<p>${t("templateDate")}</p>`:""}${city?`<p>${t("cityMeetupHelp")}</p>`:""}<form data-form="event" data-id="${e?.id ? Number(e.id) : ""}">
+  return `<h1>${t(city?"arrangeCityMeetup":repeat?"repeat":e?"edit":"create")}</h1>${draft?`<p>${t("templateDate")}</p>`:""}${!e&&!city?walkPicker():""}${city?`<p>${t("cityMeetupHelp")}</p>`:""}<form data-form="event" data-id="${e?.id ? Number(e.id) : ""}">
+    ${!demo&&!e?select("meetupMode","meetupMode",[["meetup",t("standardMeetup")],["idea",t("ideaMode")]],"meetup"):""}
+    ${!demo&&!e?`<div id="proposal-options" hidden>${field("minPeople","minPeople",3,"number",'min="2" max="21" step="1" disabled')}<p class="muted">${t("proposalHelp")}</p></div>`:e?.minPeople?`<p>${t("minPeople")}: ${e.minPeople}</p><p class="muted">${t("proposalFixed")}</p>`:""}
     ${field("title","title",values?.title||draft?.title[lang==="en"?1:0],"text",'required maxlength="120"')}
-    ${textArea("description","description",values?.description,'maxlength="3000"')}
+    ${textArea("description","description",values?.description||(draft?.description?.[lang==="en"?1:0]),'maxlength="3000"')}
     <div class="grid">${select("category","category",cats.map(x=>[x,t(x)]),values?.category||draft?.category)}
-    ${select("mood","mood",moods.map(x=>[x,x?t(x):"—"]),values?.mood)}</div>
+    ${select("mood","mood",moods.map(x=>[x,x?t(x):"—"]),values?.mood)}</div><p class="muted">${t("atmosphereHelp")}</p>
+    <div id="walk-goal" ${values?.category==="walk"||draft?.category==="walk"?"":"hidden"}>${select("walkGoal","walkGoal",[["","—"],...Object.keys(walkTemplates()).map(goal=>[goal,t("walk_"+goal)])],values?.walkGoal||draft?.walkGoal||"")}</div>
     ${areaSelect(values?.area||draft?.area||user.area)}${field("place","place",values?.place||draft?.place,"text",'required maxlength="180"')}
     ${field("date","start",draft||repeat?"":localDate(cityStart||(e?new Date(e.start):new Date(Date.now()+86400000))),"datetime-local",'required')}
     ${field("endTime","end",draft||repeat?"":localDate(e?.end?new Date(e.end):new Date((cityStart?cityStart.getTime():e?Date.parse(e.start):Date.now()+86400000)+7200000)),"datetime-local","required")}
@@ -954,6 +1071,7 @@ function plansPage() {
   const plans=events.filter(event=>!isPast(event)&&(event.joined||event.saved||event.waitlisted));
   return `<h1>${t("plans")}</h1><h2>${t("own")}</h2>${active.map(event=>card(event)).join("")||`<p>${t("none")}</p>`}
     ${link("create","#create","primary")}
+    <details class="card"><summary>${t("proposalPlans")}</summary>${events.filter(event=>event.interested&&!isPast(event)).map(event=>card(event)).join("")||`<p>${t("none")}</p>`}</details>
     <div class="card"><h2>${t("pastAttended")}</h2>${attendedPast.map(event=>card(event)).join("")||`<p>${t("none")}</p>`}</div>
     <div class="card"><h2>${t("expired")}</h2>${archived.map(event=>card(event,link("repeat",`#create/repeat/${Number(event.id)}`))).join("")||`<p>${t("none")}</p>`}</div>
     <div class="card"><h2>${t("saved")}</h2>${plans.map(event=>card(event)).join("")||`<p>${t("noPlans")}</p>`}</div>`;
@@ -966,7 +1084,7 @@ function memberPage(id) {
   return `<h1>${member?esc(member.name):t("memberProfile")}</h1>${member?`<section class="card">
     ${member.bio?`<h2>${t("bio")}</h2><p>${esc(member.bio)}</p>`:""}
     ${member.languages?`<h2>${t("spokenLanguages")}</h2><p>${esc(member.languages)}</p>`:""}
-    ${!demo&&user.id!==id?action(t(member.following?"unfollow":"follow"),`data-follow="${id}" data-enabled="${!member.following}"`):""}
+    ${!demo&&user.id!==id?`<div class="actions">${action(t(member.following?"unfollow":"follow"),`data-follow="${id}" data-enabled="${!member.following}"`)}${friendControls(id)}</div>`:""}
     </section>${safetyActions(id,"person",id)}`:""}`;
 }
 function profilePage() {
@@ -975,7 +1093,7 @@ function profilePage() {
   return `<div class="rows between account-heading"><h1>${t("profile")}</h1>
     <details class="account-menu"><summary aria-label="${t("accountMenu")}"><span aria-hidden="true">☰</span></summary>
       <div class="account-menu-panel">
-        ${link("plans","#plans")}${link("notices","#notices")}
+        ${link("plans","#plans")}${link("notices","#notices")}${!demo?link("friends","#friends"):""}
         ${action(t("passwordLabel"),'data-account-section="profile-password"')}
         ${blockedPeople.length?action(t("blockedPeople"),'data-account-section="profile-blocked"'):""}
         ${base?action(t("deleteAccount"),'data-account-section="profile-delete"',"danger"):""}
@@ -1018,6 +1136,41 @@ function adminPage() {
       ${(admin.feedback||[]).map(row=>`<article><p><a href="#event/${Number(row.event_id)}">#${Number(row.event_id)}</a> · ${t("welcomed")} ${t(row.welcome)} · ${t("comeAgain")} ${t(row.again)}</p><p>${esc(row.note)}</p></article>`).join("")}</details>
     <h2>${t("events")} · ${events.length}</h2>${events.map(e=>card(e,action(t("deleteEvent"),`data-event="${Number(e.id)}" data-op="delete"`,"danger"))).join("")}`;
 }
+function friendControls(id) {
+  if(friendContext?.id!==id) return "";
+  const state=friendContext.status;
+  if(state==="accepted") return `${link("message",`#messages/${id}`,"primary")}${link("inviteFriend",`#friends/invite/${id}`)}`;
+  if(state==="incoming") return `${action(t("acceptFriend"),`data-friend-reply="${id}" data-accept="true"`,"primary")}${action(t("declineFriend"),`data-friend-reply="${id}" data-accept="false"`)}`;
+  if(state==="outgoing") return `<span class="muted">${t("friendPending")}</span>`;
+  return friendContext.canRequest?action(t("addFriend"),`data-add-friend="${id}"`):"";
+}
+function messageNavigation(active) {
+  if(demo) return "";
+  return `<nav class="message-tabs actions" aria-label="${t("messages")}"><a class="action" href="#messages" ${active==="messages"?'aria-current="page"':""}>${t("conversations")}</a><a class="action" href="#friends" ${active==="friends"?'aria-current="page"':""}>${t("friends")}</a></nav>`;
+}
+function friendsPage() {
+  if(demo) return `<h1>${t("friends")}</h1><p>${t("messageDemo")}</p>`;
+  const incoming=friends.filter(p=>p.status==="pending"&&p.direction==="incoming");
+  const outgoing=friends.filter(p=>p.status==="pending"&&p.direction==="outgoing");
+  const accepted=friends.filter(p=>p.status==="accepted");
+  const request=(person,received)=>`<article class="card"><h3>${memberLink(person.id,person.name)}</h3><div class="actions">${received?`${action(t("acceptFriend"),`data-friend-reply="${person.id}" data-accept="true"`,"primary")}${action(t("declineFriend"),`data-friend-reply="${person.id}" data-accept="false"`)}`:action(t("withdrawFriend"),`data-remove-friend="${person.id}" data-withdraw="true"`)}</div></article>`;
+  return `<h1>${t("friends")}</h1>${messageNavigation("friends")}<p class="muted">${t("friendsHelp")}</p>
+    ${incoming.length?`<section><h2>${t("friendRequests")} · ${incoming.length}</h2>${incoming.map(p=>request(p,true)).join("")}</section>`:""}
+    ${accepted.map(p=>`<article class="card"><h2>${memberLink(p.id,p.name)}</h2>${p.bio?`<p>${esc(p.bio.slice(0,160))}</p>`:""}${p.languages?`<p class="muted">${esc(p.languages)}</p>`:""}<div class="actions">${link("message",`#messages/${p.id}`,"primary")}${link("inviteFriend",`#friends/invite/${p.id}`)}</div><details><summary>${t("manageFriend")}</summary>${action(t("removeFriend"),`data-remove-friend="${p.id}"`,"danger")}</details></article>`).join("")||`<p>${t("friendsEmpty")}</p>`}
+    ${link("pastParticipants","#plans")}${outgoing.length?`<details class="card"><summary>${t("friendOutgoing")} · ${outgoing.length}</summary>${outgoing.map(p=>request(p,false)).join("")}</details>`:""}`;
+}
+function inviteEvents() {return events.filter(e=>!e.hidden&&!e.cancelled&&Date.parse(e.start)>Date.now()&&(!e.minPeople||e.proposalPhase==="active")&&(e.owner===user.id||e.joined));}
+function friendInvitePage(peer) {
+  const person=friends.find(p=>p.id===peer&&p.status==="accepted");
+  if(!person) return `<h1>${t("inviteFriend")}</h1><p>${t("missing")}</p>${link("friends","#friends")}`;
+  const upcoming=inviteEvents();
+  return `<h1>${t("inviteFriend")}</h1><p>${memberLink(peer,person.name)}</p>${messageNavigation("friends")}<p class="muted">${t("inviteHelp")}</p>
+    ${upcoming.length?`<form data-form="friendInvite" data-peer="${peer}">${select("chooseInvite","id",upcoming.map(e=>[String(e.id),eventTitle(e)+" · "+dateLabel(e.start)]),String(upcoming[0].id))}<button class="primary">${t("sendInvite")}</button></form>`:`<p>${t("noInviteEvents")}</p>`}
+    <div class="actions">${link("browseEvents","#discover")}${link("create","#create")}</div>`;
+}
+function canCompose(peer) {
+  return demo?chatThreads().has(peer):chatPeer?.id===peer?chatPeer.canSend:friends.some(p=>p.id===peer&&p.status==="accepted");
+}
 function chatThreads() {
   const threads=new Map();
   for (const message of messageList) {
@@ -1045,17 +1198,20 @@ function chatContent(peer) {
     <p class="muted">${esc(thread.items[0].body)}</p><small>${esc(dateLabel(thread.items[0].created))}</small>
     </a>`).join("")}</div>`:`<p>${t("noMessages")}</p>`;
   const thread=threads.get(peer);
-  if (!thread) return `<p>${t("noMessages")}</p>`;
+  if (!thread) {
+    const person=chatPeer?.id===peer?chatPeer:friends.find(p=>p.id===peer&&p.status==="accepted");
+    return person?.name?`<h2>${memberLink(peer,person.name)}</h2><p>${t(person.friend||person.status==="accepted"?"friendChatHelp":"retainedChatHelp")}</p><p class="muted">${t("firstFriendMessage")}</p>`:`<p>${t("noMessages")}</p>`;
+  }
   const groups=[];
   for (const message of [...thread.items].reverse()) {
     const previous=groups[groups.length-1];
     if (previous?.sender===message.sender) previous.items.push(message);
     else groups.push({sender:message.sender,items:[message]});
   }
-  return `<div class="rows between"><h2>${memberLink(peer,thread.name)}</h2>${action(t("deleteConversation"),`data-delete-chat="${peer}" data-through="${Number(thread.items[0].id)}"`,"danger")}</div><p class="muted">${t("retainedChatHelp")}</p><div class="card chat-timeline">${groups.map(({sender,items})=>`
+  return `<div class="rows between"><h2>${memberLink(peer,thread.name)}</h2>${action(t("deleteConversation"),`data-delete-chat="${peer}" data-through="${Number(thread.items[0].id)}"`,"danger")}</div><p class="muted">${t(chatPeer?.id===peer&&chatPeer.friend?"friendChatHelp":"retainedChatHelp")}</p><div class="card chat-timeline">${groups.map(({sender,items})=>`
     <section class="chat-group ${sender===user.id?"chat-own":""}">
       <strong>${esc(sender===user.id?user.name:thread.name)}</strong>
-      ${items.map(m=>`<div class="chat-entry"><p>${esc(m.body)}</p><small class="muted">${esc(dateLabel(m.created))}</small>
+      ${items.map(m=>`<div class="chat-entry"><p>${esc(m.body)}</p>${m.invite_event?m.invite_available?link("details",`#event/${Number(m.invite_event)}`):`<p class="muted">${t("inviteUnavailable")}</p>`:""}<small class="muted">${esc(dateLabel(m.created))}</small>
         ${sender===peer?link("reportMessage",`#report/message/${Number(m.id)}`):""}${action(t("deleteMessage"),`data-delete-message="${Number(m.id)}" data-peer="${peer}"`)}</div>`).join("")}</section>`).join("")}
     </div>${safetyActions(peer,"person",peer)}`;
 }
@@ -1064,9 +1220,9 @@ function scrollChatToLatest() {
   if (timeline) timeline.scrollTop=timeline.scrollHeight;
 }
 function messagesPage(peer) {
-  return `<h1>${t("messages")}</h1>${demo?`<p class="muted">${t("messageDemo")}</p>`:""}
+  return `<h1>${t("messages")}</h1>${messageNavigation("messages")}${demo?`<p class="muted">${t("messageDemo")}</p>`:""}
     ${peer?link("conversations","#messages"):""}<div id="chat-content">${chatContent(peer)}</div>
-    ${peer?`<form id="chat-compose" data-form="chat" data-peer="${peer}" ${chatThreads().has(peer)?"":"hidden"}>
+    ${peer?`<form id="chat-compose" data-form="chat" data-peer="${peer}" ${canCompose(peer)?"":"hidden"}>
       ${textArea("message","body","","required maxlength=1500")}<button class="primary">${t("send")}</button></form>`:""}`;
 }
 let chatsRequest;
@@ -1078,6 +1234,13 @@ function refreshChats() {
     const rows=await api(demo?"/messages":"/chats");
     if (user?.id!==owner) return;
     const [page,id]=route();
+    if(page==="messages"&&Number(id)>0&&!demo) {
+      let info;
+      try {info=await api("/chats/peer",{peer:Number(id)});}
+      catch(error){if(!["missing","forbidden","messageBlocked"].includes(error.message))throw error;info={id:Number(id),canSend:false,friend:false};}
+      if(user?.id!==owner||route().join("/")!==page+"/"+id) return;
+      chatPeer=info;
+    }
     if (page==="messages" && id && !demo && document.visibilityState!=="hidden") {
       const peer=Number(id);
       const unread=rows.filter(m=>m.sender===peer&&m.recipient===owner&&m.unread);
@@ -1102,7 +1265,7 @@ function refreshChats() {
         const timeline=pane.querySelector(".chat-timeline");
         if (timeline) timeline.scrollTop=atEnd?timeline.scrollHeight:scroll;
       }
-      if ($("chat-compose")) $("chat-compose").hidden=!chatThreads().has(peer);
+      if ($("chat-compose")) $("chat-compose").hidden=!canCompose(peer);
     }
   })().finally(()=>{chatsRequest=undefined;});
   return chatsRequest;
@@ -1129,7 +1292,7 @@ setInterval(()=>{
 },15000);
 function noticesPage() {
   return `<h1>${t("notices")}</h1>${action(t("refresh"),"data-refresh")}`+
-    (noticeList.length?noticeList.map(n=>`<article class="card"><h2><a href="${n.kind==="group"?"#group/"+Number(n.event_id):n.kind==="feedback"?"#feedback/"+Number(n.event_id):n.kind==="message"?(n.sender_id?"#messages/"+Number(n.sender_id):"#messages"):"#event/"+Number(n.event_id)}">${esc(n.title)}</a></h2>
+    (noticeList.length?noticeList.map(n=>`<article class="card"><h2><a href="${["friendRequest","friendAccepted"].includes(n.kind)?"#friends":n.kind==="again"?"#again/"+Number(n.event_id):n.kind==="group"?"#group/"+Number(n.event_id):n.kind==="feedback"?"#feedback/"+Number(n.event_id):n.kind==="message"?(n.sender_id?"#messages/"+Number(n.sender_id):"#messages"):"#event/"+Number(n.event_id)}">${esc(n.title)}</a></h2>
       <p>${esc(n.name)} ${t(n.kind==="message"?"messageNotice":n.kind)} · ${esc(dateLabel(n.created))}</p></article>`).join(""):`<p>${t("noNotices")}</p>`);
 }
 document.addEventListener("input",event=>{
@@ -1211,7 +1374,9 @@ document.addEventListener("submit",async event=>{
       const original=events.find(entry=>entry.id===Number(form.dataset.id));
       data.start=original && localDate(new Date(original.start))===data.start ? original.start : stockholmDate(data.start);
       if(data.end) data.end=stockholmDate(data.end);
-      data.repeatCount=Number(data.repeatCount||1);
+      data.minPeople=original?.minPeople||(!demo&&data.meetupMode==="idea"?Number(data.minPeople):0);
+      data.walkGoal=data.category==="walk"?data.walkGoal||"":"";
+      data.repeatCount=data.minPeople?1:Number(data.repeatCount||1);
       data.quick=data.quick==="on";
       data.newcomers=data.newcomers==="on";
       data.price=Number(data.price||0);
@@ -1242,6 +1407,11 @@ document.addEventListener("submit",async event=>{
       await api("/account/delete",{...data,email:user.email});
       session();
       location.hash="discover";
+    } else if(mode==="friendInvite") {
+      await api("/friends/invite",{peer:Number(form.dataset.peer),id:Number(data.id),lang});
+      location.hash="messages/"+Number(form.dataset.peer);
+      status("inviteSent");
+      return;
     } else if (mode==="chat") {
       const peer=Number(form.dataset.peer);
       if (demo) {
@@ -1342,6 +1512,7 @@ document.addEventListener("click",async event=>{
     filterForm.elements.query.value=filters.query;
     filterForm.elements.area.value=filters.area;
     filterForm.elements.category.value=filters.category;
+    filterForm.elements.mood.value=filters.mood;
     filterForm.elements.period.value=filters.period;
     if (filterForm.elements.eventSource) filterForm.elements.eventSource.value="";
     filterForm.elements.newcomers.checked=false;
@@ -1364,7 +1535,17 @@ document.addEventListener("click",async event=>{
   }
   button.disabled=true;
   try {
-    if(d.deleteChat||d.deleteMessage) {
+    if(d.addFriend||d.friendReply||d.removeFriend) {
+      if(d.addFriend) await api("/friends/request",{peer:Number(d.addFriend)});
+      else if(d.friendReply) await api("/friends/reply",{peer:Number(d.friendReply),accept:d.accept==="true"});
+      else {if(!d.withdraw&&!confirm(t("removeFriendConfirm")))return;await api("/friends/remove",{peer:Number(d.removeFriend)});}
+      status("done");
+    } else if(d.interest||d.confirmProposal||d.again) {
+      if(d.interest) await api("/interest",{id:Number(d.interest),enabled:d.enabled==="true"});
+      else if(d.confirmProposal) await api("/proposals/confirm",{id:Number(d.confirmProposal)});
+      else await api("/again/change",{id:Number(d.again),peer:Number(d.peer),enabled:d.enabled==="true"});
+      status("done");
+    } else if(d.deleteChat||d.deleteMessage) {
       if(!confirm(t(d.deleteChat?"deleteConversationConfirm":"deleteMessageConfirm"))) return;
       // Finish an older refresh before applying the deletion so it cannot restore stale history.
       if(chatsRequest) await chatsRequest;
@@ -1432,6 +1613,19 @@ document.addEventListener("click",async event=>{
 });
 document.addEventListener("change",event=>{
   const form=event.target.form;
+  if(form?.dataset.form==="event") {
+    if(event.target.name==="meetupMode") {
+      const idea=event.target.value==="idea";
+      $("proposal-options").hidden=!idea;
+      form.elements.minPeople.required=idea;
+      form.elements.minPeople.disabled=!idea;
+      form.elements.capacity.max=idea?20:5000;
+      form.elements.minPeople.max=Math.min(21,Number(form.elements.capacity.value)+1);
+      if(form.elements.repeatCount){form.elements.repeatCount.disabled=idea;if(idea)form.elements.repeatCount.value="1";}
+    }
+    if(event.target.name==="capacity" && form.elements.minPeople) form.elements.minPeople.max=Math.min(21,Number(event.target.value)+1);
+    if(event.target.name==="category" && $("walk-goal")) $("walk-goal").hidden=event.target.value!=="walk";
+  }
   if(event.target.name==="start" && form?.dataset.form==="event" && form.elements.end) {
     try {
       const input=event.target, previous=input.dataset.previous||input.defaultValue;

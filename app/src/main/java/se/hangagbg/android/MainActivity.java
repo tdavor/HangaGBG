@@ -129,13 +129,13 @@ public final class MainActivity extends Activity {
         if (!webReady) return;
         long peer = intent.getLongExtra(AlertsJob.OPEN_CHAT,0);
         long event = intent.getLongExtra(AlertsJob.OPEN_EVENT,0);
-        if (peer==0 && event<=0) return;
         String section=intent.getStringExtra(AlertsJob.OPEN_SECTION);
+        if (peer==0 && event<=0 && !"friends".equals(section)) return;
         intent.removeExtra(AlertsJob.OPEN_SECTION);
         intent.removeExtra(AlertsJob.OPEN_CHAT);
         intent.removeExtra(AlertsJob.OPEN_EVENT);
-        String route = peer>0 ? "messages/"+peer : peer<0 ? "messages" : "event/"+event;
-        if (peer==0 && event>0 && ("group".equals(section)||"feedback".equals(section))) route=section+"/"+event;
+        String route = "friends".equals(section)?"friends":peer>0 ? "messages/"+peer : peer<0 ? "messages" : "event/"+event;
+        if (peer==0 && event>0 && ("group".equals(section)||"feedback".equals(section)||"again".equals(section))) route=section+"/"+event;
         web.evaluateJavascript("location.hash = '"+route+"'; window.hangaRefreshChats?.();", null);
     }
 
