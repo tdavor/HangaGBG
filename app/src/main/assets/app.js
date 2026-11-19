@@ -34,13 +34,14 @@ const copy = {
   groupReport:["Anmäl gruppmeddelande","Report group message"],
 
   cityOngoing:["Pågår nu","Ongoing now"],
-  cityCalendar:["Göteborgs Stad","City of Gothenburg"],
-  cityCalendarUnavailable:["Stadens kalendarium är tillfälligt otillgängligt.","The city calendar is temporarily unavailable."],
+  cityOfficial:["Göteborgs Stad","City of Gothenburg"],
+  cityCalendar:["Evenemang i Göteborg","Events in Gothenburg"],
+  cityCalendarUnavailable:["Evenemangskalendern är tillfälligt otillgänglig.","The event calendar is temporarily unavailable."],
   eventSource:["Visa träffar från","Show events from"],
   communityEvents:["Hänga Gbg","Hänga Gbg"],
   arrangeCityMeetup:["Ordna en träff","Arrange a meetup"],
   cityMeetups:["Träffar för evenemanget","Meetups for this event"],
-  cityMeetupHelp:["Välj tid och mötesplats. Efter publicering kan du bjuda in andra och skriva till deltagare i Hänga Gbg. Kontrollera eventuell bokning på Göteborgs Stads webbplats.","Choose a time and meeting point. After publishing, invite others and message participants in Hänga Gbg. Check any booking requirements on the city website."],
+  cityMeetupHelp:["Välj tid och mötesplats. Efter publicering kan du bjuda in andra och skriva till deltagare i Hänga Gbg. Kontrollera pris och eventuell bokning hos arrangören.","Choose a time and meeting point. After publishing, invite others and message participants in Hänga Gbg. Check prices and booking requirements with the organizer."],
   cityShare:["Dela / bjud in","Share / invite"],
   cityInvite:["Vill du följa med?","Want to come along?"],
   conversations:["Konversationer","Conversations"],
@@ -188,7 +189,8 @@ let cityItems = [], cityRequest, cityLoadedAt = 0, cityUnavailable = false, city
 const cityId = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const cityPortal = "https://goteborg.se/wps/portal/kalendarium/kalendarium-start?activityId=";
 function validCityEvent(item) {
-  return item && cityId.test(item.id) && item.source===cityPortal+item.id
+  return item && ((cityId.test(item.id) && item.source===cityPortal+item.id)
+    || (/^tickster-[a-z0-9]{10,32}$/i.test(item.id) && item.source==="https://www.tickster.com/sv/events/"+item.id.slice(9)))
     && [item.title,item.place,item.organizer].every(value=>typeof value==="string")
     && Number.isFinite(Date.parse(item.start)) && Date.parse(item.end)>=Date.parse(item.start) && Date.parse(item.end)>Date.now();
 }
@@ -832,7 +834,7 @@ function cityActions(event) {
     ${link("arrangeCityMeetup",user?`#create/city/${esc(event.id)}`:`#auth/login/${esc(event.id)}`,"primary")}</div>`;
 }
 function cityCard(event) {
-  return `<article class="card city-card"><span class="pill">${t("cityCalendar")}</span>
+  return `<article class="card city-card"><span class="pill">${esc(event.provider==="tickster"?"Tickster":t("cityOfficial"))}</span>
     <h2><a href="#city/${esc(event.id)}">${esc(event.title)}</a></h2>
     <p class="muted">${esc(dateLabel(event.start))}${event.end!==event.start?" – "+esc(dateLabel(event.end)):""}${event.place?" · "+esc(event.place):""}</p>
     ${Date.parse(event.start)<=Date.now()?`<span class="pill">${t("cityOngoing")}</span>`:""}</article>`;
@@ -840,7 +842,7 @@ function cityCard(event) {
 function cityPage(event) {
   if (!event) return `<h1>${t("cityCalendar")}</h1><p>${t(cityUnavailable?"cityCalendarUnavailable":"missing")}</p>`;
   const meetups=events.filter(e=>e.source===event.source&&!e.hidden&&!e.cancelled&&!isPast(e));
-  return `<span class="pill">${t("cityCalendar")}</span><h1>${esc(event.title)}</h1>
+  return `<span class="pill">${esc(event.provider==="tickster"?"Tickster":t("cityOfficial"))}</span><h1>${esc(event.title)}</h1>
     <p>${esc(dateLabel(event.start))}${event.end!==event.start?" – "+esc(dateLabel(event.end)):""}</p>
     ${event.place?`<p>${eventAddress(event)}</p>`:""}${event.organizer?`<p>${esc(event.organizer)}</p>`:""}
     <div class="actions">${link("source",event.source)}</div>${cityActions(event)}

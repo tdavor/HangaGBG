@@ -35,3 +35,19 @@ Validation: `node --test backend/test/*.mjs`. GitHub Actions builds the Android 
 Private chat history survives meetup deletion. Each member can delete a message or the current conversation history for themselves; the other member's copy is unchanged. New messages after a conversation deletion appear normally. New messages still require a shared meetup and respect blocks. Messages already physically removed by older Worker deployments are not restored by this change.
 
 City-calendar entries are filtered by their Stockholm-aware end time on both the Worker and Android UI, including cached responses. Ended entries are removed when the app resumes and at the next event-end timer while open. Calendar cards show the end time and label ongoing activities. City content is a live feed, not copied into member-event records.
+
+
+## Tickster event source
+
+The Worker combines the existing city calendar with Tickster Event API v1.0. Cards identify their source and retain sharing and meetup creation. Tickster entries are scoped to Göteborg; cancelled events and production/collection containers are excluded. Unknown end times expire at the start rather than inventing a duration. Matching title, exact start instant and nonempty venue suppress duplicate imported occurrences; different dates and venues remain separate. Member meetups are never deduplicated against imported events. Both backend and device remove ended entries, including cached results.
+
+Request an API key at https://developer.tickster.com/ and confirm the provider's access and reuse terms. Configure it only as a Cloudflare Worker secret:
+
+```sh
+npx wrangler secret put TICKSTER_API_KEY
+npx wrangler deploy
+```
+
+Run these from the repository root using the existing Cloudflare account. Never put the key in Android assets, source control or public configuration. With no key, only the city calendar is fetched. Each provider has a separate cache (city 5 minutes, Tickster 15 minutes); a failed provider does not suppress the other provider's results. The `X-Event-Sources` response header reports missing configuration or partial outages without exposing credentials. Tickster pagination is capped at 2,000 results and an overall 10-second fetch budget. Images are not imported or hotlinked.
+
+Validation: `node --test backend/test/*.mjs` and `node --check app/src/main/assets/app.js`. Real Tickster access and production deployment require the API key and Cloudflare deployment access; mocked tests do not establish live access.

@@ -3,7 +3,7 @@ import {action,reads} from "./actions.mjs";
 import {sendWelcome} from "./welcome.mjs";
 import {sendChatPush} from "./push.mjs";
 import {pendingPrompts} from "./community.mjs";
-import {cityCalendar} from "./city-events.mjs";
+import {externalCalendar} from "./external-events.mjs";
 
 const headers = {"Content-Type":"application/json","Cache-Control":"no-store",
   "Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET, POST, OPTIONS",
@@ -72,7 +72,7 @@ export default {
     if (request.method==="OPTIONS") return new Response(null,{status:204,headers});
     const path=new URL(request.url).pathname;
     if (request.method==="GET" && path==="/city-events") {
-      try { return await cityCalendar(request,ctx,headers); }
+      try { return await externalCalendar(request,env,ctx,headers); }
       catch { return reply({error:"server"},503); }
     }
     if (request.method!=="POST" || !["/rpc","/alerts"].includes(path)) return reply({error:"missing"},404);
