@@ -177,3 +177,16 @@ test('a late friend-list response cannot restore another account’s contacts af
   await pending;
   assert.equal(run('friends.length'),0);
 });
+
+test('admin panel links active users to private chats and admin messages have a clear sender label',()=>{
+  const run=ui();
+  run(`user.admin=true;admin={registration:true,reports:[],feedback:[],users:[{id:1,name:'Davor',admin:true},{id:2,name:'Anna'},{id:3,name:'Blocked',blocked:true},{id:4,name:'Other admin',admin:true}]};events=[]`);
+  const panel=run('adminPage()');
+  assert.match(panel,/#messages\/2/);assert.match(panel,/#messages\/4/);
+  assert.doesNotMatch(panel,/#messages\/1/);assert.doesNotMatch(panel,/#messages\/3/);
+  run(`chatPeer={id:2,name:'Anna',adminContact:true,canSend:true};messageList=[{id:100,sender:1,recipient:2,sender_name:'Davor',recipient_name:'Anna',body:'Admin hello',admin_message:true,created:new Date().toISOString()}]`);
+  assert.match(run('chatContent(2)'),/Från administratören/);
+  run(`messageList=[]`);
+  assert.equal(run('canCompose(2)'),true);
+  assert.match(run(`lang='en';chatContent(2)`),/Private contact between the administrator/);
+});

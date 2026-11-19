@@ -1,6 +1,9 @@
 "use strict";
 
 const copy = {
+  adminMessage:["Skriv meddelande","Message user"], adminSender:["Från administratören","From the administrator"],
+  adminChatHelp:["Privat kontakt mellan administratören och användaren. Användaren kan svara här utan en gemensam träff eller vänskap.","Private contact between the administrator and the user. The user can reply here without a shared meetup or friendship."],
+
   friends:["Vänner","Friends"], friendsHelp:["Håll kontakten efter träffen. Vänskap är ömsesidig och finns kvar även om träffen raderas.","Stay in touch after a meetup. Friendship is mutual and stays even if the meetup is deleted."],
   addFriend:["Lägg till vän","Add friend"], friendPending:["Vänförfrågan skickad","Friend request sent"],
   friendRequest:["Ny vänförfrågan","New friend request"], friendAccepted:["Vänförfrågan accepterad","Friend request accepted"],
@@ -1130,6 +1133,7 @@ function adminPage() {
       ${r.resolved?t("resolved"):action(t("resolve"),`data-resolve="${Number(r.id)}"`)}</div></article>`).join("")}
     <h2>${t("accounts")} · ${admin.users.length}</h2>${admin.users.map(u=>`<article class="card">
     <strong>${esc(u.name)}</strong><p class="muted">${esc(u.email)} · ${esc(u.area)}</p>
+    ${u.id!==user.id&&!u.blocked&&!u.deleted?`<div class="actions">${link("adminMessage",`#messages/${Number(u.id)}`,"primary")}</div>`:""}
     ${u.admin?t("admin"):`<div class="actions">${action(t(u.blocked?"unblock":"block"),`data-account="${Number(u.id)}" data-op="block" data-value="${!u.blocked}"`)}
     ${action(t("delete"),`data-account="${Number(u.id)}" data-op="delete"`,"danger")}</div>`}</article>`).join("")}
     <details class="card"><summary>${t("feedbackAdmin")} · ${(admin.feedback||[]).length}</summary>
@@ -1200,7 +1204,7 @@ function chatContent(peer) {
   const thread=threads.get(peer);
   if (!thread) {
     const person=chatPeer?.id===peer?chatPeer:friends.find(p=>p.id===peer&&p.status==="accepted");
-    return person?.name?`<h2>${memberLink(peer,person.name)}</h2><p>${t(person.friend||person.status==="accepted"?"friendChatHelp":"retainedChatHelp")}</p><p class="muted">${t("firstFriendMessage")}</p>`:`<p>${t("noMessages")}</p>`;
+    return person?.name?`<h2>${memberLink(peer,person.name)}</h2><p>${t(person.adminContact?"adminChatHelp":person.friend||person.status==="accepted"?"friendChatHelp":"retainedChatHelp")}</p><p class="muted">${t("firstFriendMessage")}</p>`:`<p>${t("noMessages")}</p>`;
   }
   const groups=[];
   for (const message of [...thread.items].reverse()) {
@@ -1208,10 +1212,10 @@ function chatContent(peer) {
     if (previous?.sender===message.sender) previous.items.push(message);
     else groups.push({sender:message.sender,items:[message]});
   }
-  return `<div class="rows between"><h2>${memberLink(peer,thread.name)}</h2>${action(t("deleteConversation"),`data-delete-chat="${peer}" data-through="${Number(thread.items[0].id)}"`,"danger")}</div><p class="muted">${t(chatPeer?.id===peer&&chatPeer.friend?"friendChatHelp":"retainedChatHelp")}</p><div class="card chat-timeline">${groups.map(({sender,items})=>`
+  return `<div class="rows between"><h2>${memberLink(peer,thread.name)}</h2>${action(t("deleteConversation"),`data-delete-chat="${peer}" data-through="${Number(thread.items[0].id)}"`,"danger")}</div><p class="muted">${t(chatPeer?.id===peer&&chatPeer.adminContact?"adminChatHelp":chatPeer?.id===peer&&chatPeer.friend?"friendChatHelp":"retainedChatHelp")}</p><div class="card chat-timeline">${groups.map(({sender,items})=>`
     <section class="chat-group ${sender===user.id?"chat-own":""}">
       <strong>${esc(sender===user.id?user.name:thread.name)}</strong>
-      ${items.map(m=>`<div class="chat-entry"><p>${esc(m.body)}</p>${m.invite_event?m.invite_available?link("details",`#event/${Number(m.invite_event)}`):`<p class="muted">${t("inviteUnavailable")}</p>`:""}<small class="muted">${esc(dateLabel(m.created))}</small>
+      ${items.map(m=>`<div class="chat-entry">${m.admin_message?`<span class="pill">${t("adminSender")}</span>`:""}<p>${esc(m.body)}</p>${m.invite_event?m.invite_available?link("details",`#event/${Number(m.invite_event)}`):`<p class="muted">${t("inviteUnavailable")}</p>`:""}<small class="muted">${esc(dateLabel(m.created))}</small>
         ${sender===peer?link("reportMessage",`#report/message/${Number(m.id)}`):""}${action(t("deleteMessage"),`data-delete-message="${Number(m.id)}" data-peer="${peer}"`)}</div>`).join("")}</section>`).join("")}
     </div>${safetyActions(peer,"person",peer)}`;
 }

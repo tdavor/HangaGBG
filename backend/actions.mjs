@@ -1,6 +1,6 @@
 import {communityAction,eventExtras,notifyFollowers,weeklyStart,sendDueNotices} from "./community.mjs";
 import {socialFields,socialAction,resetPendingProposal,withdrawIdeaMember} from "./social.mjs";
-import {friendAction,friendKey,validFriendNotices,sharedMeetup} from "./friends.mjs";
+import {friendAction,friendKey,validFriendNotices,sharedMeetup,canReplyToAdmin} from "./friends.mjs";
 const eq = (field,value) => [field,"EQUAL",value];
 const fail = name => {throw new Error(name);};
 const now = () => new Date().toISOString();
@@ -199,7 +199,7 @@ export async function action(db, name, p, identity, env) {
   }
   const community=await communityAction(db,name,p,me,{text,integer,nextIds,notices});
   if(community!==null) return community;
-  const friend=await friendAction(db,name,p,me,{integer,notices,writeMessage});
+  const friend=await friendAction(db,name,p,me,{integer,notices,writeMessage,env});
   if(friend!==null) return friend;
   const social=await socialAction(db,name,p,me,{integer,notices});
   if(social!==null) return social;
@@ -243,6 +243,8 @@ export async function action(db, name, p, identity, env) {
   if (name==="chat_send") {
     const peer=integer(p.peer);
     await messagingPeer(db,uid,peer);
+    if(me.admin) return writeMessage(db,me,peer,0,"Hänga Gbg",p.body,{admin_message:true});
+    if(await canReplyToAdmin(db,uid,peer,env)) return writeMessage(db,me,peer,0,"Hänga Gbg",p.body);
     if((await db.get("friendships",friendKey(uid,peer)))?.status==="accepted") return writeMessage(db,me,peer,0,"Hänga Gbg",p.body);
     const [sent,received]=await Promise.all([
       db.query("messages",[eq("sender",uid),eq("recipient",peer)]),
