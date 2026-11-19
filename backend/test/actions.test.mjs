@@ -158,7 +158,7 @@ test("private chat unread markers belong to the recipient and notifications iden
   assert.equal((await call("chat_inbox"))[0].unread,false);
   assert.deepEqual(await call("chat_inbox",{},2),[]);
   await assert.rejects(call("chat_read",{peer:host.id,through:first.id},2),{message:"missing"});
-  await assert.rejects(call("chat_send",{peer:outsider.id,body:"Unexpected"}),{message:"forbidden"});
+  await assert.rejects(call("chat_send",{peer:outsider.id,body:"Unexpected"},1),{message:"forbidden"});
   await call("chat_read",{peer:host.id,through:first.id},1);
   assert.equal((await call("chat_inbox",{},1))[0].unread,false);
   await call("chat_send",{peer:host.id,body:"Reply"},1);
@@ -468,15 +468,15 @@ test('friendship requires mutual consent and lets an empty conversation start af
   assert.ok((await call('poll',{token:device.token,after_id:device.cursor},null)).some(n=>n.kind==='friendRequest'&&n.event_id===0));
   await assert.rejects(call('friend_reply',{peer:guest.id,accept:true}),{message:'forbidden'});
   await call('delete_event',{id});
-  await assert.rejects(call('chat_send',{peer:guest.id,body:'Before acceptance'}),{message:'forbidden'});
+  await assert.rejects(call('chat_send',{peer:host.id,body:'Before acceptance'},1),{message:'forbidden'});
   await call('friend_reply',{peer:host.id,accept:true},1);
   const [friend]=await call('friend_list');
   assert.equal(friend.status,'accepted');assert.equal(friend.email,undefined);
-  assert.equal((await call('chat_peer',{peer:guest.id})).canSend,true);
-  const sent=await call('chat_send',{peer:guest.id,body:'We can keep in touch'});
-  assert.equal(sent.pushChat.owner,guest.id);
-  assert.equal((await call('chat_inbox',{},1))[0].body,'We can keep in touch');
-  assert.equal((await call('chat_inbox',{},1))[0].event_id,0);
+  assert.equal((await call('chat_peer',{peer:host.id},1)).canSend,true);
+  const sent=await call('chat_send',{peer:host.id,body:'We can keep in touch'},1);
+  assert.equal(sent.pushChat.owner,host.id);
+  assert.equal((await call('chat_inbox'))[0].body,'We can keep in touch');
+  assert.equal((await call('chat_inbox'))[0].event_id,0);
   assert.equal((await call('notices')).filter(n=>n.kind==='friendAccepted').length,1);
 });
 
@@ -513,7 +513,7 @@ test('friend invitations require sender attendance, stay private and never RSVP 
 });
 
 test('friend removal preserves history, blocks revoke contact, and declined requests cannot be spammed',async()=>{
-  const {call,id,db,people}=await endedPair();
+  const {call,id,db,people,users}=await endedPair();
   await call('friend_request',{peer:people[1].id});
   await call('friend_reply',{peer:people[0].id,accept:false},1);
   await assert.rejects(call('friend_request',{peer:people[1].id}),{message:'forbidden'});
@@ -525,11 +525,53 @@ test('friend removal preserves history, blocks revoke contact, and declined requ
   await call('delete_event',{id});
   await call('friend_remove',{peer:people[0].id},1);
   assert.equal((await call('chat_inbox',{},1))[0].body,'Keep the history');
-  await assert.rejects(call('chat_send',{peer:people[1].id,body:'No longer friends'}),{message:'forbidden'});
+  const original=await db.get('profiles',people[0].id);
+  db.put('profiles',people[0].id,{...original,admin:false});
+  await assert.rejects(action(db,'chat_send',{peer:people[1].id,body:'No longer friends'},users[0],{ADMIN_UID:'different'}),{message:'forbidden'});
+  db.put('profiles',people[0].id,original);
   await call('friend_request',{peer:people[1].id});
   await call('friend_reply',{peer:people[0].id,accept:true},1);
   await call('block_person',{id:people[0].id,enabled:true},1);
   assert.deepEqual(await call('friend_list'),[]);
   await assert.rejects(call('chat_send',{peer:people[1].id,body:'Blocked'}),{message:'messageBlocked'});
   assert.deepEqual(await db.query('friendships'),[]);
+});
+
+test('admins can initiate private contact without an event and only the contacted user gains reply permission',async()=>{
+  const {call,people,id,db,users}=await app();
+  const [admin,other,contact]=people;
+  const device=await call('alerts_on',{},2);
+  assert.equal((await call('chat_peer',{peer:contact.id})).canSend,true);
+  assert.equal((await call('chat_peer',{peer:contact.id},1)).canSend,false);
+  await assert.rejects(call('chat_send',{peer:admin.id,body:'Unsolicited'},1),{message:'forbidden'});
+  const sent=await call('chat_send',{peer:contact.id,body:'Hello from the administrator'});
+  assert.equal(sent.pushChat.owner,contact.id);
+  const [first]=await call('chat_inbox',{},2);
+  assert.equal(first.admin_message,true);assert.equal(first.event_id,0);assert.equal(first.unread,true);
+  assert.equal((await call('chat_peer',{peer:admin.id},2)).adminContact,true);
+  assert.equal((await call('chat_peer',{peer:admin.id},2)).canSend,true);
+  await call('delete_event',{id});
+  await call('chat_send',{peer:admin.id,body:'My reply'},2);
+  assert.equal((await call('chat_inbox'))[0].body,'My reply');
+  assert.deepEqual(await call('chat_inbox',{},1),[]);
+  await assert.rejects(call('chat_read',{peer:admin.id,through:first.id},1),{message:'missing'});
+  assert.ok((await call('poll',{token:device.token,after_id:device.cursor},null)).some(n=>n.kind==='message'&&n.sender_id===admin.id));
+  const profile=await db.get('profiles',admin.id);db.put('profiles',admin.id,{...profile,admin:false});
+  assert.equal((await action(db,'chat_peer',{peer:admin.id},users[2],{ADMIN_UID:'different'})).canSend,false);
+  await assert.rejects(action(db,'chat_send',{peer:admin.id,body:'After role revocation'},users[2],{ADMIN_UID:'different'}),{message:'forbidden'});
+});
+
+test('admin contact cannot be spoofed and does not bypass blocks or grant access to other private chats',async()=>{
+  const {call,db,people}=await app();
+  await assert.rejects(call('chat_send',{peer:people[2].id,body:'Pretending',admin:true,admin_message:true},1),{message:'forbidden'});
+  db.put('friendships',people[1].id+'-'+people[2].id,{id:people[1].id+'-'+people[2].id,users:[people[1].id,people[2].id],status:'accepted',requester:people[1].id});
+  await call('chat_send',{peer:people[2].id,body:'Private between users',admin_message:true},1);
+  const [privateMessage]=await call('chat_inbox',{},2);
+  assert.equal(privateMessage.admin_message,undefined);
+  assert.deepEqual(await call('chat_inbox'),[]);
+  await assert.rejects(call('chat_read',{peer:people[1].id,through:privateMessage.id}),{message:'missing'});
+  await call('block_person',{id:people[0].id,enabled:true},2);
+  await assert.rejects(call('chat_send',{peer:people[2].id,body:'Blocked contact'}),{message:'messageBlocked'});
+  await call('admin_block',{id:people[1].id,blocked:true});
+  await assert.rejects(call('chat_send',{peer:people[1].id,body:'Inactive account'}),{message:'missing'});
 });

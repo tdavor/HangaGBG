@@ -1,4 +1,4 @@
-# Hänga Gbg 1.6.0 · Android
+# Hänga Gbg 1.6.1 · Android
 
 [**Ladda ner / Download Hänga Gbg för Android (.apk)**](https://github.com/tdavor/HangaGBG/releases/latest/download/HangaGBG.apk)
 
@@ -71,3 +71,5 @@ A good first meeting can become something regular. Participants can plan their n
 | Friends / Vänner | Open Messages and choose Friends. Send requests from a past participant’s profile or an existing conversation partner’s profile. Accept or decline requests, start a direct chat and invite a friend to an upcoming meetup you organize or have joined. Friendships survive deletion of the original meetup. Removing a friend keeps previous messages; blocking stops contact. |
 | Walks with a small goal | Expand the walk ideas section in Create meetup: viewpoint, photography, a new café or neighbourhood discoveries. Templates pre-fill editable titles, instructions and a goal. The organizer chooses the actual meeting place and route. |
 
+
+Administrators can open a private conversation from an active user’s card in the Admin panel. No friendship or shared meetup is required. The contacted user can reply, and administrator messages are labelled. Existing contact blocks still apply; this does not grant administrators access to conversations between other users.

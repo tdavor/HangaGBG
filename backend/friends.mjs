@@ -40,7 +40,7 @@ export async function validFriendNotices(db,uid,rows) {
       (row.kind==='friendRequest'?relation.status==='pending'&&relation.requester===row.peer_id:relation.status==='accepted');
   }).map(row=>row.id));
 }
-export async function friendAction(db,name,p,me,{integer,notices,writeMessage}) {
+export async function friendAction(db,name,p,me,{integer,notices,writeMessage,env={}}) {
   if(!['friend_list','friend_status','friend_request','friend_reply','friend_remove','friend_invite','chat_peer'].includes(name)) return null;
   const uid=me.id;
   if(name==='friend_list') {
@@ -57,7 +57,10 @@ export async function friendAction(db,name,p,me,{integer,notices,writeMessage}) 
   const id=friendKey(uid,peer),relation=await db.get('friendships',id);
   if(name==='friend_status') return {id:peer,status:relation?.status==='accepted'?'accepted':relation?.status==='pending'?relation.requester===uid?'outgoing':'incoming':'none',
     canRequest:!relation?.status||relation.status==='declined'&&relation.retryAfter<=Date.now()?await connectionExists(db,uid,peer):false};
-  if(name==='chat_peer') return {id:peer,name:person.name,friend:relation?.status==='accepted',canSend:relation?.status==='accepted'||!!await sharedMeetup(db,uid,peer)};
+  if(name==='chat_peer') {
+    const adminContact=!!me.admin||await canReplyToAdmin(db,uid,peer,env);
+    return {id:peer,name:person.name,friend:relation?.status==='accepted',adminContact,canSend:adminContact||relation?.status==='accepted'||!!await sharedMeetup(db,uid,peer)};
+  }
   if(name==='friend_remove') {
     if(relation?.status==='declined') return {};
     if(relation?.status==='pending'&&relation.requester!==uid) fail('forbidden');
@@ -97,4 +100,11 @@ export async function friendAction(db,name,p,me,{integer,notices,writeMessage}) 
   const english=p.lang==='en';
   const body=(english?'Would you like to join me?':'Vill du följa med?')+'\n'+e.title+'\n'+new Date(e.start).toLocaleString(english?'en-GB':'sv-SE',{timeZone:'Europe/Stockholm'})+'\n'+e.place+', '+e.area;
   return writeMessage(db,me,peer,eventId,e.title,body,{invite_event:eventId});
+}
+
+export async function canReplyToAdmin(db,uid,peer,env) {
+  const person=await db.get('profiles',peer);
+  if(!person||person.deleted||person.blocked||!(person.admin||person.uid===env.ADMIN_UID)) return false;
+  const sent=await db.query('messages',[eq('sender',peer),eq('recipient',uid)]);
+  return sent.some(message=>message.admin_message===true);
 }
