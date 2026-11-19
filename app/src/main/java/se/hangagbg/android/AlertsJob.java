@@ -88,7 +88,7 @@ public final class AlertsJob extends JobService {
             if (peer>0 && preferences.getLong("owner",0)>0) {
                 ChatNotifications.show(this,preferences.getLong("owner",0),peer,id);
             } else {
-                notifyEvent(notifications, Long.hashCode(id), eventId, peer, alert.getString("title"), label(kind,english), "group".equals(kind)?"group":"feedback".equals(kind)?"feedback":"");
+                notifyEvent(notifications, Long.hashCode(id), eventId, peer, alert.getString("title"), label(kind,english), "group".equals(kind)?"group":"feedback".equals(kind)?"feedback":"again".equals(kind)?"again":"");
             }
             cursor = id;
         }
@@ -167,6 +167,9 @@ public final class AlertsJob extends JobService {
 
     private String label(String kind, boolean english) {
         return switch (kind) {
+            case "again" -> english ? "You both want to meet again" : "Ni vill båda ses igen";
+            case "proposalReady" -> english ? "Enough people are interested – confirm attendance" : "Tillräckligt många är intresserade – bekräfta";
+            case "proposalActive" -> english ? "The meetup is confirmed" : "Nu blir träffen av";
             case "group" -> english ? "New group chat message" : "Nytt meddelande i gruppchatten";
             case "attendance" -> english ? "Confirm your attendance" : "Bekräfta att du kommer";
             case "feedback" -> english ? "How was your meetup?" : "Hur var träffen?";

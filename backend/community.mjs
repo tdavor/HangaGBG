@@ -120,7 +120,7 @@ export async function notifyFollowers(db,event,notices) {
 }
 
 export function duePrompt(event) {
-  if(event.cancelled||event.hidden) return null;
+  if(event.cancelled||event.hidden||(event.minPeople&&event.proposalPhase!=="active")) return null;
   const remaining=Date.parse(event.start)-Date.now();
   const kind=remaining>0&&remaining<=86400000?"attendance":until(event)<=Date.now()&&Date.now()-until(event)<7*86400000?"feedback":"";
   return kind?{kind,marker:key(event.id,kind)+"-"+Date.parse(event.start)}:null;

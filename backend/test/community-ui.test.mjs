@@ -105,3 +105,35 @@ test('expired imported events are pruned and the visible city page refreshes at 
   assert.equal(run('updates'),1);
   assert.equal(run('findCity(activeCity.id)'),undefined);
 });
+
+test('idea actions replace RSVP controls until confirmed and are discoverable beside each event',()=>{
+  const run=ui();
+  run(`events[0]={...events[0],joined:false,minPeople:3,proposalPhase:'collecting',interestCount:1,count:0}`);
+  let html=run('eventPage(events[0])');
+  assert.match(html,/data-interest="10"/);assert.doesNotMatch(html,/data-op="join"/);assert.doesNotMatch(html,/#group\/10/);
+  html=run(`events[0].interested=true;events[0].proposalPhase='confirming';eventPage(events[0])`);
+  assert.match(html,/data-confirm-proposal="10"/);
+  html=run(`events[0].proposalPhase='active';events[0].joined=true;eventPage(events[0])`);
+  assert.doesNotMatch(html,/data-interest=/);assert.match(html,/#group\/10/);
+});
+
+test('walk ideas prefill usable descriptions and goals in both languages, and atmosphere filters the list',()=>{
+  const run=ui();
+  for(const lang of ['sv','en']) {
+    run(`lang='${lang}'`);
+    const html=run('eventForm(null,walkTemplates().photo)');
+    assert.match(html,/value="photo" selected/);assert.match(html,/name="meetupMode"/);
+    assert.ok(run(`walkTemplates().photo.description[lang==='en'?1:0].length`)>100);
+    assert.equal(run('Object.keys(walkTemplates()).length'),4);
+  }
+  run(`events=[{...events[0],title:'Quiet meetup',mood:'chill'},{...events[0],id:11,title:'Talking meetup',mood:'social'}];filters={...defaultFilters,mood:'chill'};cityItems=[]`);
+  const html=run('results()');assert.match(html,/Quiet meetup/);assert.doesNotMatch(html,/Talking meetup/);
+});
+
+test('meet-again is a contextual post-event screen with private selection and mutual-only contact actions',()=>{
+  const run=ui();
+  run(`events[0].start=new Date(Date.now()-7200000).toISOString();events[0].end=new Date(Date.now()-3600000).toISOString();againEventId=10;againRows=[{id:2,name:'Anna',selected:false,matched:false}]`);
+  const event=run('eventPage(events[0])');assert.match(event,/#again\/10/);
+  let html=run('againPage(10)');assert.match(html,/data-again="10"/);assert.doesNotMatch(html,/#event\/10\/2/);
+  html=run('againRows[0].matched=true;againPage(10)');assert.match(html,/#event\/10\/2/);assert.doesNotMatch(html,/data-again=/);
+});

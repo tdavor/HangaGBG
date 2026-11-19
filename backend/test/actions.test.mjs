@@ -350,3 +350,98 @@ test('availability edits replace the own entry and deletion leaves other members
   assert.equal(await db.get('availability',people[0].id),undefined);
   assert.ok(await db.get('availability',people[1].id));
 });
+
+test('ideas invite interested members to confirm and activate only after the organizer and minimum accept',async()=>{
+  const {call,event,people}=await app();
+  const {id}=await call('create',{...event,quick:false,capacity:2,minPeople:3,category:'walk',walkGoal:'view'});
+  const get=async (i=0)=>(await call('events',{},i)).find(e=>e.id===id);
+  await assert.rejects(call('join',{id,enabled:true},1),{message:'forbidden'});
+  await call('interest',{id,enabled:true},1);
+  assert.equal((await get(1)).interested,true);assert.equal((await get()).proposalPhase,'collecting');
+  await call('interest',{id,enabled:true},1);
+  assert.equal((await get()).interestCount,1);
+  await call('interest',{id,enabled:true},2);
+  assert.equal((await get()).proposalPhase,'confirming');
+  assert.ok((await call('notices',{},1)).some(n=>n.kind==='proposalReady'));
+  await call('proposal_confirm',{id},1);await call('proposal_confirm',{id},2);
+  assert.equal((await get()).proposalPhase,'confirming');
+  assert.equal((await get(1)).joined,false);
+  await call('proposal_confirm',{id});
+  assert.equal((await get()).proposalPhase,'active');
+  assert.equal((await get(1)).joined,true);assert.equal((await get(2)).joined,true);
+  assert.equal((await get()).count,2);
+  assert.equal((await call('participants',{id})).length,3);
+  assert.ok((await call('notices',{},1)).some(n=>n.kind==='proposalActive'));
+  await call('join',{id,enabled:false},1);
+  assert.equal((await get()).proposalPhase,'active');assert.equal((await get()).count,1);
+});
+
+test('withdrawal and schedule edits invalidate proposal confirmations without creating RSVPs',async()=>{
+  const {call,event}=await app();
+  const value={...event,quick:false,capacity:3,minPeople:3};
+  const {id}=await call('create',value);
+  await call('interest',{id,enabled:true},1);await call('interest',{id,enabled:true},2);
+  await call('proposal_confirm',{id});await call('proposal_confirm',{id},1);
+  await call('interest',{id,enabled:false},2);
+  let row=(await call('events',{},1)).find(e=>e.id===id);
+  assert.equal(row.proposalPhase,'collecting');assert.equal(row.proposalConfirmed,false);assert.equal(row.count,0);
+  await call('interest',{id,enabled:true},2);await call('proposal_confirm',{id},1);
+  await call('edit',{...value,id,start:new Date(Date.parse(event.start)+3600000).toISOString()});
+  row=(await call('events',{},1)).find(e=>e.id===id);
+  assert.equal(row.proposalConfirmed,false);assert.equal(row.count,0);assert.equal(row.joined,false);
+  await assert.rejects(call('edit',{...value,id,minPeople:2}),{message:'invalid'});
+  await assert.rejects(call('create',{...value,repeatCount:2}),{message:'invalid'});
+  await assert.rejects(call('create',{...value,minPeople:5}),{message:'invalid'});
+  await assert.rejects(call('create',{...value,walkGoal:'invalid'}),{message:'invalid'});
+});
+
+test('meet-again choices remain private until mutual, cannot expose rejections and notify only the pair',async()=>{
+  const {call,db,event,id,people}=await app();
+  await call('edit',{...event,id,capacity:2});
+  await call('join',{id,enabled:true},1);await call('join',{id,enabled:true},2);
+  await assert.rejects(call('again_list',{id},1),{message:'forbidden'});
+  const row=await db.get('events',id);
+  db.put('events',id,{...row,start:new Date(Date.now()-7200000).toISOString(),end:new Date(Date.now()-3600000).toISOString()});
+  await call('again_change',{id,peer:people[0].id,enabled:true},1);
+  let hostView=await call('again_list',{id});
+  assert.deepEqual(hostView.find(p=>p.id===people[1].id),{id:people[1].id,name:'guest',selected:false,matched:false});
+  assert.equal((await call('notices')).filter(n=>n.kind==='again').length,0);
+  await call('again_change',{id,peer:people[1].id,enabled:true});
+  assert.equal((await call('again_list',{id})).find(p=>p.id===people[1].id).matched,true);
+  assert.equal((await call('again_list',{id},1)).find(p=>p.id===people[0].id).matched,true);
+  assert.ok((await call('again_list',{id},2)).every(p=>!p.selected&&!p.matched));
+  assert.equal((await call('notices',{},2)).filter(n=>n.kind==='again').length,0);
+  assert.equal((await call('notices')).find(n=>n.kind==='again').name,'guest');
+  assert.equal((await call('notices',{},1)).find(n=>n.kind==='again').name,'org');
+  await call('again_change',{id,peer:people[1].id,enabled:true});
+  assert.equal((await call('notices')).filter(n=>n.kind==='again').length,1);
+  await call('block_person',{id:people[1].id,enabled:true});
+  assert.ok((await call('again_list',{id})).every(p=>p.id!==people[1].id));
+  await assert.rejects(call('again_change',{id,peer:people[1].id,enabled:true}),{message:'missing'});
+});
+
+test('meet-again rejects outsiders, supports private undo, and account deletion clears its choices',async()=>{
+  const {call,db,id,people}=await app();
+  await call('join',{id,enabled:true},1);
+  const event=await db.get('events',id);
+  db.put('events',id,{...event,start:new Date(Date.now()-7200000).toISOString(),end:new Date(Date.now()-3600000).toISOString()});
+  await assert.rejects(call('again_list',{id},2),{message:'forbidden'});
+  await assert.rejects(call('again_change',{id,peer:people[2].id,enabled:true}),{message:'missing'});
+  await call('again_change',{id,peer:people[1].id,enabled:true});
+  await call('again_change',{id,peer:people[1].id,enabled:false});
+  assert.equal((await call('again_list',{id}))[0].selected,false);
+  await call('again_change',{id,peer:people[1].id,enabled:true});
+  await call('again_change',{id,peer:people[0].id,enabled:true},1);
+  await call('admin_delete',{id:people[1].id});
+  assert.deepEqual(await db.query('again_choices'),[]);assert.deepEqual(await db.query('again_matches'),[]);assert.deepEqual(await db.query('again_pairs'),[]);
+});
+
+test('blocking an interested account resets an unconfirmed idea and never creates RSVPs',async()=>{
+  const {call,event,people}=await app();
+  const {id}=await call('create',{...event,quick:false,capacity:2,minPeople:3});
+  await call('interest',{id,enabled:true},1);await call('interest',{id,enabled:true},2);
+  await call('proposal_confirm',{id},1);
+  await call('admin_block',{id:people[2].id,blocked:true});
+  const row=(await call('events',{},1)).find(e=>e.id===id);
+  assert.equal(row.proposalPhase,'collecting');assert.equal(row.count,0);assert.equal(row.proposalConfirmed,false);
+});

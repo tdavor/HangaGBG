@@ -135,7 +135,7 @@ public final class MainActivity extends Activity {
         intent.removeExtra(AlertsJob.OPEN_CHAT);
         intent.removeExtra(AlertsJob.OPEN_EVENT);
         String route = peer>0 ? "messages/"+peer : peer<0 ? "messages" : "event/"+event;
-        if (peer==0 && event>0 && ("group".equals(section)||"feedback".equals(section))) route=section+"/"+event;
+        if (peer==0 && event>0 && ("group".equals(section)||"feedback".equals(section)||"again".equals(section))) route=section+"/"+event;
         web.evaluateJavascript("location.hash = '"+route+"'; window.hangaRefreshChats?.();", null);
     }
 

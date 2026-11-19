@@ -57,3 +57,6 @@ input,textarea,select,.grid>*{min-width:0}
 
 .my-availability{margin-top:.75rem;border-top:1px solid var(--line);padding-top:.75rem}
 .my-availability small{display:block;color:var(--muted)}
+
+.proposal-panel .actions>button{flex:1 1 15rem}
+#proposal-options{border-left:3px solid var(--green);padding-left:.8rem;margin-block:.8rem}
