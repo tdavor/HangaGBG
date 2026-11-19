@@ -190,3 +190,25 @@ test('admin panel links active users to private chats and admin messages have a 
   assert.equal(run('canCompose(2)'),true);
   assert.match(run(`lang='en';chatContent(2)`),/Private contact between the administrator/);
 });
+
+
+test('chat keeps message actions collapsed, puts friend shortcut beside inbox and uses a compact composer',()=>{
+  const run=ui();
+  run(`messageList=[{id:100,sender:2,recipient:1,sender_name:'Anna',recipient_name:'Davor',body:'<hello>',created:new Date().toISOString()},{id:101,sender:1,recipient:2,sender_name:'Davor',recipient_name:'Anna',body:'Hi',created:new Date().toISOString()}];chatPeer={id:2,canSend:true,friend:true};`);
+  for(const language of ['sv','en']) {
+    const html=run(`lang='${language}';messagesPage(2)`);
+    assert.match(html,/chat-group chat-own/);
+    assert.match(html,/role="log"/);
+    assert.match(html,/&lt;hello&gt;/);
+    assert.match(html,/<details class="message-options"><summary[^>]*>⋮<\/summary><div class="message-options-panel">/);
+    assert.doesNotMatch(html,/<details[^>]* open/);
+    assert.match(html,/id="chat-body" name="body"/);
+    assert.match(html,/data-delete-chat="2"/);
+    assert.equal((html.match(/#report\/message\/100/g)||[]).length,1);
+    assert.doesNotMatch(html,/#report\/message\/101/);
+  }
+  run(`globalThis.nodes={};document.documentElement={};document.querySelector=()=>null;document.getElementById=id=>nodes[id]||(nodes[id]={parentElement:{setAttribute(){}},querySelector(){return null}});location.hash='#messages';render()`);
+  const header=run('nodes["header-actions"].innerHTML');
+  assert.match(header,/messages-shortcut[\s\S]*friends-shortcut[\s\S]*settings-menu/);
+  assert.match(header,/href="#notices"/);
+});
