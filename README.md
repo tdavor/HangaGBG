@@ -1,4 +1,4 @@
-# Hänga Gbg 1.5.2 · Android
+# Hänga Gbg 1.5.3 · Android
 
 [**Ladda ner / Download Hänga Gbg för Android (.apk)**](https://github.com/tdavor/HangaGBG/releases/latest/download/HangaGBG.apk)
 
@@ -33,3 +33,5 @@ Validation: `node --test backend/test/*.mjs`. GitHub Actions builds the Android 
 
 
 Private chat history survives meetup deletion. Each member can delete a message or the current conversation history for themselves; the other member's copy is unchanged. New messages after a conversation deletion appear normally. New messages still require a shared meetup and respect blocks. Messages already physically removed by older Worker deployments are not restored by this change.
+
+City-calendar entries are filtered by their Stockholm-aware end time on both the Worker and Android UI, including cached responses. Ended entries are removed when the app resumes and at the next event-end timer while open. Calendar cards show the end time and label ongoing activities. City content is a live feed, not copied into member-event records.

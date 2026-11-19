@@ -33,6 +33,7 @@ const copy = {
   repeated:["Återkommande träff","Recurring meetup"], pastAttended:["Tidigare träffar jag deltog i","Past meetups I attended"],
   groupReport:["Anmäl gruppmeddelande","Report group message"],
 
+  cityOngoing:["Pågår nu","Ongoing now"],
   cityCalendar:["Göteborgs Stad","City of Gothenburg"],
   cityCalendarUnavailable:["Stadens kalendarium är tillfälligt otillgängligt.","The city calendar is temporarily unavailable."],
   eventSource:["Visa träffar från","Show events from"],
@@ -183,22 +184,38 @@ let blockedPeople=[];
 let memberProfile = null;
 let availability=[],followingPeople=[],groupRows=[],groupEventId=0,feedbackData={};
 let user = null, events = [], messageList = [], noticeList = [], admin = null;
-let cityItems = [], cityRequest, cityLoadedAt = 0, cityUnavailable = false;
+let cityItems = [], cityRequest, cityLoadedAt = 0, cityUnavailable = false, cityExpiryTimer;
 const cityId = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const cityPortal = "https://goteborg.se/wps/portal/kalendarium/kalendarium-start?activityId=";
 function validCityEvent(item) {
   return item && cityId.test(item.id) && item.source===cityPortal+item.id
     && [item.title,item.place,item.organizer].every(value=>typeof value==="string")
-    && Number.isFinite(Date.parse(item.start)) && Date.parse(item.end)>=Date.parse(item.start);
+    && Number.isFinite(Date.parse(item.start)) && Date.parse(item.end)>=Date.parse(item.start) && Date.parse(item.end)>Date.now();
 }
 
-function loadCityCalendar() {
-  if (demo || !base || Date.now()-cityLoadedAt<(cityUnavailable?60000:600000)) return;
+function pruneCityEvents() {
+  cityItems=cityItems.filter(validCityEvent);
+}
+function scheduleCityExpiry() {
+  clearTimeout(cityExpiryTimer);
+  const next=Math.min(...cityItems.map(item=>Date.parse(item.end)));
+  if(!Number.isFinite(next)) return;
+  cityExpiryTimer=setTimeout(()=>{
+    pruneCityEvents();
+    if(route()[0]==="discover" && $("results")) refreshResults();
+    else if(route()[0]==="city") render();
+    scheduleCityExpiry();
+  },Math.max(1,Math.min(2147483647,next-Date.now()+20)));
+}
+function loadCityCalendar(force=false) {
+  pruneCityEvents();
+  scheduleCityExpiry();
+  if (demo || !base || (!force && Date.now()-cityLoadedAt<(cityUnavailable?60000:300000))) return;
   if (cityRequest) return cityRequest;
   const origin=base;
   cityRequest=(async()=>{
     try {
-      const response=await fetch(origin+"/city-events",{redirect:"error",credentials:"omit",signal:AbortSignal.timeout(15000)});
+      const response=await fetch(origin+"/city-events",{cache:"no-store",redirect:"error",credentials:"omit",signal:AbortSignal.timeout(15000)});
       if (!response.ok) throw new Error("cityCalendarUnavailable");
       const items=await response.json();
       if (!Array.isArray(items)) throw new Error("cityCalendarUnavailable");
@@ -206,6 +223,7 @@ function loadCityCalendar() {
         cityItems=items.filter(validCityEvent).map(item=>({...item,city:true,area:"Göteborg",category:"other"}));
         cityLoadedAt=Date.now();
         cityUnavailable=false;
+        scheduleCityExpiry();
       }
     } catch {
       if (origin===base) {
@@ -816,7 +834,8 @@ function cityActions(event) {
 function cityCard(event) {
   return `<article class="card city-card"><span class="pill">${t("cityCalendar")}</span>
     <h2><a href="#city/${esc(event.id)}">${esc(event.title)}</a></h2>
-    <p class="muted">${esc(dateLabel(event.start))}${event.place?" · "+esc(event.place):""}</p></article>`;
+    <p class="muted">${esc(dateLabel(event.start))}${event.end!==event.start?" – "+esc(dateLabel(event.end)):""}${event.place?" · "+esc(event.place):""}</p>
+    ${Date.parse(event.start)<=Date.now()?`<span class="pill">${t("cityOngoing")}</span>`:""}</article>`;
 }
 function cityPage(event) {
   if (!event) return `<h1>${t("cityCalendar")}</h1><p>${t(cityUnavailable?"cityCalendarUnavailable":"missing")}</p>`;
@@ -1090,7 +1109,17 @@ function refreshChats() {
 }
 window.hangaRefreshChats=()=>{void refreshChats().catch(()=>{});};
 document.addEventListener("visibilitychange",()=>{
-  if (document.visibilityState!=="hidden") window.hangaRefreshChats();
+  if (document.visibilityState!=="hidden") {
+    window.hangaRefreshChats();
+    pruneCityEvents();
+    const page=route()[0];
+    if(page==="discover" && $("results")) refreshResults();
+    else if(page==="city") render();
+    if(["discover","city"].includes(page)) void loadCityCalendar(true)?.then(()=>{
+      if(route()[0]==="discover" && $("results")) refreshResults();
+      else if(route()[0]==="city") render();
+    });
+  }
 });
 setInterval(()=>{
   if (document.visibilityState!=="hidden") {

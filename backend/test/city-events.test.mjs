@@ -32,3 +32,43 @@ test("Stockholm summer time and invalid clock changes are handled",()=>{
   assert.deepEqual(cityEvents([{...activity,startTime:"2026-03-29T02:30:00"}],0),[]);
   assert.deepEqual(cityEvents([{...activity,id:"invalid"}],0),[]);
 });
+
+test('cached city responses discard newly ended events on every request and disable device caching',async()=>{
+  const {cityCalendar}=await import('../city-events.mjs');
+  const start='2026-11-19T09:00:00.000Z',end='2026-11-19T10:00:00.000Z';
+  const rows=[{id:communityCalendarId,title:'Morning',start,end},
+    {id:'3dbc5ddb-6b09-43e7-ba70-f03fcd3a3376',title:'Later',start:'2026-11-19T11:00:00.000Z',end:'2026-11-19T12:00:00.000Z'}];
+  const cache={async match(){return new Response(JSON.stringify(rows))}};
+  let now=Date.parse('2026-11-19T09:30:00Z');
+  const options={cache,clock:()=>now,send(){throw new Error('Cache should be used')}};
+  const request=new Request('https://example.test/city-events');
+  const first=await cityCalendar(request,{}, {},options);
+  assert.equal((await first.json()).length,2);
+  assert.equal(first.headers.get('Cache-Control'),'no-store');
+  now=Date.parse(end);
+  const second=await cityCalendar(request,{}, {},options);
+  assert.deepEqual((await second.json()).map(row=>row.title),['Later']);
+  now=Date.parse('2026-11-19T12:00:00Z');
+  assert.deepEqual(await (await cityCalendar(request,{}, {},options)).json(),[]);
+});
+
+test('city importer fetches official calendar pages and excludes ended events before caching',async()=>{
+  const {cityCalendar}=await import('../city-events.mjs');
+  const now=Date.parse('2026-11-19T12:00:00Z');
+  const urls=[],writes=[],pending=[];
+  const row={id:communityCalendarId,title:'Today',startTime:'2026-11-19T12:00:00',endTime:'2026-11-19T14:00:00'};
+  const send=async url=>{
+    urls.push(new URL(url));
+    return new Response(JSON.stringify({content:[row,{...row,id:'3dbc5ddb-6b09-43e7-ba70-f03fcd3a3376',endTime:'2026-11-19T13:00:00'}]}));
+  };
+  const cache={async match(){},async put(key,response){writes.push({key,body:await response.json()})}};
+  const response=await cityCalendar(new Request('https://example.test/city-events'),{waitUntil:p=>pending.push(p)}, {},{send,cache,clock:()=>now});
+  await Promise.all(pending);
+  assert.equal(urls.length,4);
+  assert.ok(urls.every(url=>url.origin==='https://microservices.goteborg.se'&&url.searchParams.get('published')==='true'));
+  assert.deepEqual(urls.map(url=>url.searchParams.get('page')),['0','1','2','3']);
+  const items=await response.json();
+  assert.equal(items.length,1);
+  assert.ok(items.every(item=>Date.parse(item.end)>now));
+  assert.deepEqual(writes[0].body,items);
+});
