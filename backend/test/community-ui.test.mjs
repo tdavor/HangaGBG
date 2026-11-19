@@ -85,3 +85,23 @@ test('availability save and delete refresh local state even when already on the 
   assert.equal(run('renderCount'),2);
   assert.equal(run('lastStatus'),'availabilityRemoved');
 });
+
+test('expired imported events are pruned and the visible city page refreshes at event end',()=>{
+  const run=ui();
+  run(`globalThis.testNow=Date.parse('2026-11-19T12:00:00Z');Date=class extends Date{static now(){return testNow}};
+    globalThis.updates=0;render=()=>{updates++};globalThis.nextExpiry=null;
+    setTimeout=(fn,delay)=>{nextExpiry={fn,delay};return 1};
+    location.hash='#city/47e827a0-cb0d-4578-bff8-ef4c0041561e';
+    globalThis.activeCity={id:'47e827a0-cb0d-4578-bff8-ef4c0041561e',title:'Exhibition',place:'Museum',organizer:'City',source:cityPortal+'47e827a0-cb0d-4578-bff8-ef4c0041561e',start:'2026-11-19T11:00:00Z',end:'2026-11-19T13:00:00Z',city:true};
+    cityItems=[activeCity,{...activeCity,id:'3dbc5ddb-6b09-43e7-ba70-f03fcd3a3376',source:cityPortal+'3dbc5ddb-6b09-43e7-ba70-f03fcd3a3376',end:'2026-11-19T11:30:00Z'}];
+    pruneCityEvents();scheduleCityExpiry();`);
+  assert.equal(run('cityItems.length'),1);
+  assert.equal(run('nextExpiry.delay'),3600020);
+  assert.match(run('cityCard(activeCity)'),/Pågår nu/);
+  assert.match(run('cityCard(activeCity)'),/ – /);
+  assert.match(run("lang='en';cityCard(activeCity)"),/Ongoing now/);
+  run('testNow=Date.parse(activeCity.end);nextExpiry.fn()');
+  assert.equal(run('cityItems.length'),0);
+  assert.equal(run('updates'),1);
+  assert.equal(run('findCity(activeCity.id)'),undefined);
+});

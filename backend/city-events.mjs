@@ -40,23 +40,35 @@ export function cityEvents(rows, now=Date.now()) {
   return [...entries.values()].sort((a,b)=>a.start.localeCompare(b.start)||a.id.localeCompare(b.id));
 }
 
-export async function cityCalendar(request, ctx, headers) {
-  const key = new URL("/city-events",request.url).href;
-  const cache = globalThis.caches?.default;
+function activeCachedEvents(items,now) {
+  if(!Array.isArray(items)) throw new Error("Invalid cached city calendar");
+  return items.filter(item=>item&&idPattern.test(item.id)&&Number.isFinite(Date.parse(item.start))&&
+    Date.parse(item.end)>=Date.parse(item.start)&&Date.parse(item.end)>now);
+}
+
+export async function cityCalendar(request, ctx, headers, {send=fetch,cache=globalThis.caches?.default,clock=Date.now}={}) {
+  const key = new URL("/city-events?format=2",request.url).href;
+  const responseFor=items=>new Response(JSON.stringify(items),{
+    headers:{...headers,"Cache-Control":"no-store"}
+  });
   const cached = await cache?.match(key);
-  if (cached) return cached;
+  if (cached) {
+    try { return responseFor(activeCachedEvents(await cached.json(),clock())); }
+    catch { /* Ignore invalid cached data and fetch the calendar again. */ }
+  }
   const pages = await Promise.all([0,1,2,3].map(async page=>{
     const url = new URL(api);
     url.search = new URLSearchParams({published:"true",size:"100",page:String(page)});
-    const response = await fetch(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(8000)});
+    const response = await send(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(8000)});
     if (!response.ok) throw new Error("City calendar unavailable");
     const data = await response.json();
     if (!Array.isArray(data.content)) throw new Error("Invalid city calendar");
     return data.content;
   }));
-  const response = new Response(JSON.stringify(cityEvents(pages.flat())),{
-    headers:{...headers,"Cache-Control":"public, max-age=600"}
-  });
-  if (cache) ctx.waitUntil(cache.put(key,response.clone()));
-  return response;
+  const items=cityEvents(pages.flat(),clock());
+  if (cache) {
+    const stored=new Response(JSON.stringify(items),{headers:{...headers,"Cache-Control":"public, max-age=300"}});
+    ctx.waitUntil(cache.put(key,stored));
+  }
+  return responseFor(items);
 }
