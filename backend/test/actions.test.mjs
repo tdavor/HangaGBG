@@ -434,7 +434,7 @@ test('meet-again rejects outsiders, supports private undo, and account deletion 
   await call('again_change',{id,peer:people[1].id,enabled:true});
   await call('again_change',{id,peer:people[0].id,enabled:true},1);
   await call('admin_delete',{id:people[1].id});
-  assert.deepEqual(await db.query('again_choices'),[]);assert.deepEqual(await db.query('again_matches'),[]);assert.deepEqual(await db.query('again_pairs'),[]);
+  assert.deepEqual(await db.query('again_choices'),[]);assert.deepEqual(await db.query('again_matches'),[]);assert.deepEqual(await db.query('again_pairs'),[]);assert.deepEqual(await db.query('friendships'),[]);
 });
 
 test('blocking an interested account resets an unconfirmed idea and never creates RSVPs',async()=>{
@@ -445,4 +445,91 @@ test('blocking an interested account resets an unconfirmed idea and never create
   await call('admin_block',{id:people[2].id,blocked:true});
   const row=(await call('events',{},1)).find(e=>e.id===id);
   assert.equal(row.proposalPhase,'collecting');assert.equal(row.count,0);assert.equal(row.proposalConfirmed,false);
+});
+
+async function endedPair() {
+  const value=await app();
+  await value.call('join',{id:value.id,enabled:true},1);
+  const event=await value.db.get('events',value.id);
+  value.db.put('events',value.id,{...event,start:new Date(Date.now()-7200000).toISOString(),end:new Date(Date.now()-3600000).toISOString()});
+  return value;
+}
+
+test('friendship requires mutual consent and lets an empty conversation start after event deletion',async()=>{
+  const {call,db,id,people}=await endedPair();
+  const [host,guest]=people;
+  const device=await call('alerts_on',{},1);
+  await assert.rejects(call('friend_request',{peer:host.id},2),{message:'forbidden'});
+  assert.equal((await call('friend_status',{peer:guest.id})).canRequest,true);
+  await call('friend_request',{peer:guest.id});
+  await call('friend_request',{peer:guest.id});
+  assert.equal((await call('friend_list',{},1))[0].direction,'incoming');
+  assert.equal((await call('notices',{},1)).filter(n=>n.kind==='friendRequest').length,1);
+  assert.ok((await call('poll',{token:device.token,after_id:device.cursor},null)).some(n=>n.kind==='friendRequest'&&n.event_id===0));
+  await assert.rejects(call('friend_reply',{peer:guest.id,accept:true}),{message:'forbidden'});
+  await call('delete_event',{id});
+  await assert.rejects(call('chat_send',{peer:guest.id,body:'Before acceptance'}),{message:'forbidden'});
+  await call('friend_reply',{peer:host.id,accept:true},1);
+  const [friend]=await call('friend_list');
+  assert.equal(friend.status,'accepted');assert.equal(friend.email,undefined);
+  assert.equal((await call('chat_peer',{peer:guest.id})).canSend,true);
+  const sent=await call('chat_send',{peer:guest.id,body:'We can keep in touch'});
+  assert.equal(sent.pushChat.owner,guest.id);
+  assert.equal((await call('chat_inbox',{},1))[0].body,'We can keep in touch');
+  assert.equal((await call('chat_inbox',{},1))[0].event_id,0);
+  assert.equal((await call('notices')).filter(n=>n.kind==='friendAccepted').length,1);
+});
+
+test('a mutual meet-again choice creates a durable friendship without exposing unilateral choices',async()=>{
+  const {call,db,id,people}=await endedPair();
+  await call('again_change',{id,peer:people[1].id,enabled:true});
+  assert.deepEqual(await call('friend_list'),[]);
+  await call('again_change',{id,peer:people[0].id,enabled:true},1);
+  assert.equal((await call('friend_list'))[0].status,'accepted');
+  await call('delete_event',{id});
+  const {removeEventRelations}=await import('../index.mjs');
+  db.writes=new Map();db.send=async()=>({});await removeEventRelations(db,id);
+  assert.equal((await call('friend_list')).length,1);
+  await call('chat_send',{peer:people[1].id,body:'Next time?'});
+  assert.equal((await call('chat_inbox',{},1))[0].body,'Next time?');
+});
+
+test('friend invitations require sender attendance, stay private and never RSVP for the recipient',async()=>{
+  const {call,db,event,people}=await endedPair();
+  await call('friend_request',{peer:people[1].id});await call('friend_reply',{peer:people[0].id,accept:true},1);
+  const next=await call('create',{...event,quick:false,capacity:3},2);
+  await assert.rejects(call('friend_invite',{id:next.id,peer:people[1].id}),{message:'forbidden'});
+  await call('save',{id:next.id,enabled:true});
+  await assert.rejects(call('friend_invite',{id:next.id,peer:people[1].id}),{message:'forbidden'});
+  await call('join',{id:next.id,enabled:true});
+  await call('friend_invite',{id:next.id,peer:people[1].id,lang:'en'});
+  const [invite]=await call('chat_inbox',{},1);
+  assert.equal(invite.invite_event,next.id);assert.equal(invite.invite_available,true);
+  assert.match(invite.body,/Would you like to join me/);
+  assert.equal(await db.get('plans',next.id+'-'+people[1].id),undefined);
+  assert.deepEqual(await call('chat_inbox',{},2),[]);
+  await call('delete_event',{id:next.id},2);
+  assert.equal((await call('chat_inbox',{},1))[0].invite_available,false);
+});
+
+test('friend removal preserves history, blocks revoke contact, and declined requests cannot be spammed',async()=>{
+  const {call,id,db,people}=await endedPair();
+  await call('friend_request',{peer:people[1].id});
+  await call('friend_reply',{peer:people[0].id,accept:false},1);
+  await assert.rejects(call('friend_request',{peer:people[1].id}),{message:'forbidden'});
+  await call('friend_remove',{peer:people[1].id});
+  await assert.rejects(call('friend_request',{peer:people[1].id}),{message:'forbidden'});
+  const key=Math.min(people[0].id,people[1].id)+'-'+Math.max(people[0].id,people[1].id);
+  db.put('friendships',key,{id:key,users:[people[0].id,people[1].id],requester:people[0].id,status:'accepted'});
+  await call('chat_send',{peer:people[1].id,body:'Keep the history'});
+  await call('delete_event',{id});
+  await call('friend_remove',{peer:people[0].id},1);
+  assert.equal((await call('chat_inbox',{},1))[0].body,'Keep the history');
+  await assert.rejects(call('chat_send',{peer:people[1].id,body:'No longer friends'}),{message:'forbidden'});
+  await call('friend_request',{peer:people[1].id});
+  await call('friend_reply',{peer:people[0].id,accept:true},1);
+  await call('block_person',{id:people[0].id,enabled:true},1);
+  assert.deepEqual(await call('friend_list'),[]);
+  await assert.rejects(call('chat_send',{peer:people[1].id,body:'Blocked'}),{message:'messageBlocked'});
+  assert.deepEqual(await db.query('friendships'),[]);
 });

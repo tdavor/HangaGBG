@@ -88,7 +88,7 @@ public final class AlertsJob extends JobService {
             if (peer>0 && preferences.getLong("owner",0)>0) {
                 ChatNotifications.show(this,preferences.getLong("owner",0),peer,id);
             } else {
-                notifyEvent(notifications, Long.hashCode(id), eventId, peer, alert.getString("title"), label(kind,english), "group".equals(kind)?"group":"feedback".equals(kind)?"feedback":"again".equals(kind)?"again":"");
+                notifyEvent(notifications, Long.hashCode(id), eventId, peer, alert.getString("title"), label(kind,english), "group".equals(kind)?"group":"feedback".equals(kind)?"feedback":"again".equals(kind)?"again":("friendRequest".equals(kind)||"friendAccepted".equals(kind))?"friends":"");
             }
             cursor = id;
         }
@@ -167,6 +167,8 @@ public final class AlertsJob extends JobService {
 
     private String label(String kind, boolean english) {
         return switch (kind) {
+            case "friendRequest" -> english ? "New friend request" : "Ny vänförfrågan";
+            case "friendAccepted" -> english ? "Friend request accepted" : "Vänförfrågan accepterad";
             case "again" -> english ? "You both want to meet again" : "Ni vill båda ses igen";
             case "proposalReady" -> english ? "Enough people are interested – confirm attendance" : "Tillräckligt många är intresserade – bekräfta";
             case "proposalActive" -> english ? "The meetup is confirmed" : "Nu blir träffen av";

@@ -60,3 +60,5 @@ input,textarea,select,.grid>*{min-width:0}
 
 .proposal-panel .actions>button{flex:1 1 15rem}
 #proposal-options{border-left:3px solid var(--green);padding-left:.8rem;margin-block:.8rem}
+
+.message-tabs{margin-block:.5rem 1rem}.message-tabs [aria-current]{background:var(--green);color:#102a25;font-weight:750}

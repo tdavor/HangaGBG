@@ -1,3 +1,4 @@
+import {acceptFriendship} from "./friends.mjs";
 const eq=(field,value)=>[field,'EQUAL',value];
 const key=(a,b)=>a+'-'+b;
 const fail=code=>{throw new Error(code)};
@@ -48,6 +49,7 @@ export async function socialAction(db,name,p,me,{integer,notices}) {
     db.put('again_pairs',pair,{id:pair,event_id:id,users:[uid,target],revision:(revision?.revision||0)+1});
     db.put('again_choices',claim,{id:claim,event_id:id,user_id:uid,target});
     if(reciprocal) {
+      await acceptFriendship(db,uid,target,id);
       db.put('again_matches',pair,{id:pair,event_id:id,users:[uid,target],created:new Date().toISOString()});
       await notices(db,e,[[uid,'again',person.name]]);
       await notices(db,e,[[target,'again',me.name]]);

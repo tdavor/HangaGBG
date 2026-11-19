@@ -1,5 +1,6 @@
 import {communityAction,eventExtras,notifyFollowers,weeklyStart,sendDueNotices} from "./community.mjs";
 import {socialFields,socialAction,resetPendingProposal,withdrawIdeaMember} from "./social.mjs";
+import {friendAction,friendKey,validFriendNotices,sharedMeetup} from "./friends.mjs";
 const eq = (field,value) => [field,"EQUAL",value];
 const fail = name => {throw new Error(name);};
 const now = () => new Date().toISOString();
@@ -73,7 +74,7 @@ async function notices(db, e, entries) {
   for (const [kind,{recipients,name}] of byKind) {
     const unique=[...new Set(recipients)];
     for (let offset=0;offset<unique.length;offset+=1000) {
-      batches.push({event_id:e.id,kind,name,title:e.title,created:now(),recipients:unique.slice(offset,offset+1000)});
+      batches.push({event_id:e.id,...(e.friendPeer?{peer_id:e.friendPeer}:{}),kind,name,title:e.title,created:now(),recipients:unique.slice(offset,offset+1000)});
     }
   }
   let id = await nextIds(db,batches.length);
@@ -127,11 +128,11 @@ async function messages(db,id,chat=false) {
     const recipient = people.get(String(m.recipient));
     const event = events.get(String(m.event_id));
     if (!sender || !recipient || sender.deleted || recipient.deleted || (chat && (sender.blocked || recipient.blocked)) || denied.has(m.sender) || denied.has(m.recipient)) return [];
-    return [{...m,title:m.title||event?.title||"",sender_name:sender.name,recipient_name:recipient.name}];
+    return [{...m,...(m.invite_event?{invite_available:!!event&&!event.hidden&&!event.cancelled}:{}),title:m.title||event?.title||"",sender_name:sender.name,recipient_name:recipient.name}];
   });
 }
 
-export const reads = new Set(["events","me","registration","participants","messages","notices","admin","block_list","poll","member_profile","chat_inbox","availability_list","follow_list","group_messages","feedback_get","again_list"]);
+export const reads = new Set(["events","me","registration","participants","messages","notices","admin","block_list","poll","member_profile","chat_inbox","availability_list","follow_list","group_messages","feedback_get","again_list","friend_list","friend_status","chat_peer"]);
 export async function action(db, name, p, identity, env) {
   if(name==="due_notices") {if(identity!==null) fail("forbidden");await sendDueNotices(db,notices,integer(p.id));return {};}
   if (name==="registration") return {registration:(await db.get("settings","app"))?.registration!==false};
@@ -149,7 +150,9 @@ export async function action(db, name, p, identity, env) {
       db.getMany("profiles",senders),db.getMany("blocks",senders.flatMap(sender=>[planKey(user.id,sender),planKey(sender,user.id)]))
     ]);
     const visibleMessages=new Set((await messages(db,user.id,true)).map(m=>m.id));
-    return alerts.map(({id,kind,event_id,title,sender_id,message_id})=>{
+    const friendNotices=await validFriendNotices(db,user.id,alerts);
+    return alerts.map(({id,kind,event_id,title,sender_id,message_id,peer_id})=>{
+      if(["friendRequest","friendAccepted"].includes(kind)) return {id,kind:friendNotices.has(id)?kind:"message_skipped",event_id:0,title,peer_id};
       if (kind==="message") {
         const sender=sender_id||legacy.get(String(message_id||id-1))?.sender;
         const profile=people.get(String(sender));
@@ -196,6 +199,8 @@ export async function action(db, name, p, identity, env) {
   }
   const community=await communityAction(db,name,p,me,{text,integer,nextIds,notices});
   if(community!==null) return community;
+  const friend=await friendAction(db,name,p,me,{integer,notices,writeMessage});
+  if(friend!==null) return friend;
   const social=await socialAction(db,name,p,me,{integer,notices});
   if(social!==null) return social;
   if (name==="member_profile") {
@@ -238,22 +243,26 @@ export async function action(db, name, p, identity, env) {
   if (name==="chat_send") {
     const peer=integer(p.peer);
     await messagingPeer(db,uid,peer);
+    if((await db.get("friendships",friendKey(uid,peer)))?.status==="accepted") return writeMessage(db,me,peer,0,"Hänga Gbg",p.body);
     const [sent,received]=await Promise.all([
       db.query("messages",[eq("sender",uid),eq("recipient",peer)]),
       db.query("messages",[eq("sender",peer),eq("recipient",uid)])
     ]);
-    const eventIds=new Set([...sent,...received].sort(sortNewest).map(m=>m.event_id));
+    const eventIds=new Set([...sent,...received].sort(sortNewest).map(m=>m.event_id).filter(id=>Number.isSafeInteger(id)&&id>0));
     for (const id of eventIds) {
       try { return await eventAction(db,"message",{id,recipient:peer,body:p.body},me); }
       catch (error) { if (!["forbidden","missing","cancelled"].includes(error.message)) throw error; }
     }
+    const shared=await sharedMeetup(db,uid,peer);
+    if(shared) return eventAction(db,"message",{id:shared.id,recipient:peer,body:p.body},me);
     fail("forbidden");
   }
   if (name==="notices") {
     const rows=await readNotices(db,uid);
     const visibleMessages=new Set((await messages(db,uid,true)).map(m=>m.id));
+    const friendNotices=await validFriendNotices(db,uid,rows);
     const events=await db.getMany("events",rows.map(row=>row.event_id));
-    return rows.filter(row=>row.kind==="message"?visibleMessages.has(row.message_id||row.id-1):row.kind==="cancelled" || events.has(String(row.event_id))).map(({recipients,...row})=>row);
+    return rows.filter(row=>["friendRequest","friendAccepted"].includes(row.kind)?friendNotices.has(row.id):row.kind==="message"?visibleMessages.has(row.message_id||row.id-1):row.kind==="cancelled" || events.has(String(row.event_id))).map(({recipients,...row})=>row);
   }
   if (name==="alerts_on") {
     const cursor = (await db.query("notices",[byRecipient(uid)],descending,1))[0]?.id||0;
@@ -327,7 +336,7 @@ export async function action(db, name, p, identity, env) {
         db.query("feedback",[eq("user_id",target.id)]),db.query("group_messages",[eq("sender",target.id)]),
         db.query("chat_hidden",[eq("owner",target.id)]),db.query("chat_hidden",[eq("peer",target.id)]),
         db.query("again_choices",[eq("user_id",target.id)]),db.query("again_choices",[eq("target",target.id)]),
-        db.query("again_matches",[["users","ARRAY_CONTAINS",target.id]]),db.query("again_pairs",[["users","ARRAY_CONTAINS",target.id]])
+        db.query("again_matches",[["users","ARRAY_CONTAINS",target.id]]),db.query("again_pairs",[["users","ARRAY_CONTAINS",target.id]]),db.query("friendships",[["users","ARRAY_CONTAINS",target.id]])
       ]);
       db.remove("availability",target.id);
       for(const row of [...additional[0],...additional[1]]) db.remove("follows",planKey(row.follower,row.organizer));
@@ -337,6 +346,7 @@ export async function action(db, name, p, identity, env) {
       for(const row of [...additional[6],...additional[7]]) db.remove("again_choices",row.id);
       for(const row of additional[8]) db.remove("again_matches",row.id);
       for(const row of additional[9]) db.remove("again_pairs",row.id);
+      for(const row of additional[10]) db.remove("friendships",row.id);
       for (const m of [...sent,...received]) db.remove("messages",m.id);
       for (const marker of [...readBy,...readAbout]) db.remove("chat_reads",planKey(marker.owner,marker.peer));
       for (const e of owned) db.remove("events",e.id);
@@ -359,7 +369,7 @@ export async function action(db, name, p, identity, env) {
     const id = integer(p.id);
     if (id===uid) fail("invalid");
     if (!(await db.get("profiles",id))?.name) fail("missing");
-    if (p.enabled===true) db.put("blocks",planKey(uid,id),{blocker:uid,blocked:id});
+    if (p.enabled===true) {db.put("blocks",planKey(uid,id),{blocker:uid,blocked:id});db.remove("friendships",friendKey(uid,id));}
     else db.remove("blocks",planKey(uid,id));
     return {};
   }
@@ -530,11 +540,11 @@ async function messagingPeer(db,uid,recipient) {
   if (blocks.size) fail("messageBlocked");
 }
 
-async function writeMessage(db,me,recipient,event_id,title,value) {
+async function writeMessage(db,me,recipient,event_id,title,value,metadata={}) {
   const body=text(value,1500,1);
   const msg=await nextIds(db,2);
   const created=now();
-  db.put("messages",msg,{id:msg,event_id,title,sender:me.id,recipient,body,created});
+  db.put("messages",msg,{...metadata,id:msg,event_id,title,sender:me.id,recipient,body,created});
   db.put("notices",msg+1,{id:msg+1,event_id,message_id:msg,kind:"message",sender_id:me.id,name:me.name,title:title||me.name,created,recipients:[recipient]});
   return {pushChat:{owner:recipient,peer:me.id,notice:msg+1}};
 }

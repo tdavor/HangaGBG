@@ -135,7 +135,7 @@ test('meet-again is a contextual post-event screen with private selection and mu
   run(`events[0].start=new Date(Date.now()-7200000).toISOString();events[0].end=new Date(Date.now()-3600000).toISOString();againEventId=10;againRows=[{id:2,name:'Anna',selected:false,matched:false}]`);
   const event=run('eventPage(events[0])');assert.match(event,/#again\/10/);
   let html=run('againPage(10)');assert.match(html,/data-again="10"/);assert.doesNotMatch(html,/#event\/10\/2/);
-  html=run('againRows[0].matched=true;againPage(10)');assert.match(html,/#event\/10\/2/);assert.doesNotMatch(html,/data-again=/);
+  html=run('againRows[0].matched=true;againPage(10)');assert.match(html,/#messages\/2/);assert.match(html,/#friends\/invite\/2/);assert.doesNotMatch(html,/data-again=/);
 });
 
 test('proposal progress and a reciprocal meet-again choice refresh on the current screen',async()=>{
@@ -147,4 +147,33 @@ test('proposal progress and a reciprocal meet-again choice refresh on the curren
   await run('refreshSocialPage()');
   assert.equal(run('againRows[0].matched'),true);
   assert.equal(run('rendered'),2);
+});
+
+test('friends live inside messages, new friend chats have a composer and invitations use attended events only',()=>{
+  const run=ui();
+  run(`friends=[{id:2,name:'Anna',bio:'Hello',languages:'Svenska',status:'accepted',direction:'incoming'},{id:3,name:'Bob',status:'pending',direction:'incoming'}]`);
+  let html=run('friendsPage()');
+  assert.match(html,/#messages/);assert.match(html,/#friends\/invite\/2/);assert.match(html,/data-friend-reply="3"/);
+  html=run('messagesPage(2)');assert.match(html,/data-peer="2" >/);assert.match(html,/Anna/);
+  assert.doesNotMatch(html,/data-peer="2" hidden/);
+  run(`events=[{...events[0],owner:2,joined:false},{...events[0],id:11,joined:true},{...events[0],id:12,owner:1,joined:false}]`);
+  html=run('friendInvitePage(2)');assert.match(html,/value="11"/);assert.match(html,/value="12"/);assert.doesNotMatch(html,/value="10"/);
+});
+
+test('friend requests refresh on the list without resetting an open invitation form',async()=>{
+  const run=ui();
+  run(`location.hash='#friends';globalThis.updates=0;render=()=>{updates++};friends=[];api=async()=>[{id:2,name:'Anna',status:'pending',direction:'incoming'}]`);
+  await run('refreshSocialPage()');
+  assert.equal(run('friends.length'),1);assert.equal(run('updates'),1);
+  run(`location.hash='#friends/invite/2';api=()=>{throw new Error('Do not reset an invitation')}`);
+  await run('refreshSocialPage()');assert.equal(run('updates'),1);
+});
+
+test('a late friend-list response cannot restore another account’s contacts after switching accounts',async()=>{
+  const run=ui();
+  run(`location.hash='#friends';globalThis.finishFriends=null;api=()=>new Promise(resolve=>{finishFriends=resolve});render=()=>{}`);
+  const pending=run('load()');
+  run(`user={id:9,name:'Other account'};friends=[];finishFriends([{id:2,name:'Private old contact',status:'accepted'}])`);
+  await pending;
+  assert.equal(run('friends.length'),0);
 });
