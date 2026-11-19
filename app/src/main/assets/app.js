@@ -4,6 +4,7 @@ const copy = {
   adminMessage:["Skriv meddelande","Message user"], adminSender:["Från administratören","From the administrator"],
   adminChatHelp:["Privat kontakt mellan administratören och användaren. Användaren kan svara här utan en gemensam träff eller vänskap.","Private contact between the administrator and the user. The user can reply here without a shared meetup or friendship."],
 
+  messageOptions:["Meddelandealternativ","Message options"], conversationOptions:["Konversationsalternativ","Conversation options"], appMenu:["Appmeny","App menu"], chatPlaceholder:["Skriv ett meddelande…","Write a message…"],
   friends:["Vänner","Friends"], friendsHelp:["Håll kontakten efter träffen. Vänskap är ömsesidig och finns kvar även om träffen raderas.","Stay in touch after a meetup. Friendship is mutual and stays even if the meetup is deleted."],
   addFriend:["Lägg till vän","Add friend"], friendPending:["Vänförfrågan skickad","Friend request sent"],
   friendRequest:["Ny vänförfrågan","New friend request"], friendAccepted:["Vänförfrågan accepterad","Friend request accepted"],
@@ -623,13 +624,13 @@ function hasArea(event,area) {
 function render() {
   const [page,id,recipient]=route();
   document.documentElement.lang=lang;
-  const pages=["discover","plans","create","profile","about"];
+  const pages=["discover","plans","create","notices","profile","about"];
   if (user?.admin) pages.push("admin");
   const menuLinks=pages.map(key=>`<a class="action" href="#${key}" ${page===key?'aria-current="page"':""}>${t(key)}</a>`).join("");
   $("header-actions").innerHTML=`<a class="messages-shortcut action" href="#messages" aria-label="${t("messages")}" title="${t("messages")}" ${page==="messages"?'aria-current="page"':""}>
-    <span aria-hidden="true">✉</span><span id="unread-messages" class="message-count" hidden></span></a><details class="account-menu settings-menu">
-    <summary aria-label="${t("accountMenu")}" title="${t("accountMenu")}"><span aria-hidden="true">⚙</span></summary>
-    <nav class="account-menu-panel" aria-label="${t("accountMenu")}">${menuLinks}</nav>
+    <span aria-hidden="true">✉</span><span id="unread-messages" class="message-count" hidden></span></a><a class="friends-shortcut action" href="#friends" aria-label="${t("friends")}" title="${t("friends")}" ${page==="friends"?'aria-current="page"':""}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 5v2"/></svg></a><details class="account-menu settings-menu">
+    <summary aria-label="${t("appMenu")}" title="${t("appMenu")}"><span aria-hidden="true">⚙</span></summary>
+    <nav class="account-menu-panel" aria-label="${t("appMenu")}">${menuLinks}</nav>
   </details>`;
   updateChatBadge();
   let html;
@@ -1096,7 +1097,7 @@ function profilePage() {
   return `<div class="rows between account-heading"><h1>${t("profile")}</h1>
     <details class="account-menu"><summary aria-label="${t("accountMenu")}"><span aria-hidden="true">☰</span></summary>
       <div class="account-menu-panel">
-        ${link("plans","#plans")}${link("notices","#notices")}${!demo?link("friends","#friends"):""}
+
         ${action(t("passwordLabel"),'data-account-section="profile-password"')}
         ${blockedPeople.length?action(t("blockedPeople"),'data-account-section="profile-blocked"'):""}
         ${base?action(t("deleteAccount"),'data-account-section="profile-delete"',"danger"):""}
@@ -1204,7 +1205,7 @@ function chatContent(peer) {
   const thread=threads.get(peer);
   if (!thread) {
     const person=chatPeer?.id===peer?chatPeer:friends.find(p=>p.id===peer&&p.status==="accepted");
-    return person?.name?`<h2>${memberLink(peer,person.name)}</h2><p>${t(person.adminContact?"adminChatHelp":person.friend||person.status==="accepted"?"friendChatHelp":"retainedChatHelp")}</p><p class="muted">${t("firstFriendMessage")}</p>`:`<p>${t("noMessages")}</p>`;
+    return person?.name?`${link("conversations","#messages")}<h2>${memberLink(peer,person.name)}</h2><p>${t(person.adminContact?"adminChatHelp":person.friend||person.status==="accepted"?"friendChatHelp":"retainedChatHelp")}</p><p class="muted">${t("firstFriendMessage")}</p>`:`<p>${t("noMessages")}</p>`;
   }
   const groups=[];
   for (const message of [...thread.items].reverse()) {
@@ -1212,22 +1213,19 @@ function chatContent(peer) {
     if (previous?.sender===message.sender) previous.items.push(message);
     else groups.push({sender:message.sender,items:[message]});
   }
-  return `<div class="rows between"><h2>${memberLink(peer,thread.name)}</h2>${action(t("deleteConversation"),`data-delete-chat="${peer}" data-through="${Number(thread.items[0].id)}"`,"danger")}</div><p class="muted">${t(chatPeer?.id===peer&&chatPeer.adminContact?"adminChatHelp":chatPeer?.id===peer&&chatPeer.friend?"friendChatHelp":"retainedChatHelp")}</p><div class="card chat-timeline">${groups.map(({sender,items})=>`
+  return `<div class="chat-heading"><a class="action chat-back" href="#messages" aria-label="${t("conversations")}">←</a><h2>${memberLink(peer,thread.name)}</h2><details class="account-menu chat-options"><summary aria-label="${t("conversationOptions")}" title="${t("conversationOptions")}">⋮</summary><div class="account-menu-panel">${action(t("deleteConversation"),`data-delete-chat="${peer}" data-through="${Number(thread.items[0].id)}"`,"danger")}${safetyActions(peer,"person",peer)}</div></details></div><div class="chat-timeline" role="log" aria-label="${t("messages")}">${groups.map(({sender,items})=>`
     <section class="chat-group ${sender===user.id?"chat-own":""}">
-      <strong>${esc(sender===user.id?user.name:thread.name)}</strong>
-      ${items.map(m=>`<div class="chat-entry">${m.admin_message?`<span class="pill">${t("adminSender")}</span>`:""}<p>${esc(m.body)}</p>${m.invite_event?m.invite_available?link("details",`#event/${Number(m.invite_event)}`):`<p class="muted">${t("inviteUnavailable")}</p>`:""}<small class="muted">${esc(dateLabel(m.created))}</small>
-        ${sender===peer?link("reportMessage",`#report/message/${Number(m.id)}`):""}${action(t("deleteMessage"),`data-delete-message="${Number(m.id)}" data-peer="${peer}"`)}</div>`).join("")}</section>`).join("")}
-    </div>${safetyActions(peer,"person",peer)}`;
+      ${items.map(m=>`<div class="chat-entry">${m.admin_message?`<span class="pill">${t("adminSender")}</span>`:""}<p>${esc(m.body)}</p>${m.invite_event?m.invite_available?link("details",`#event/${Number(m.invite_event)}`):`<p class="muted">${t("inviteUnavailable")}</p>`:""}<div class="chat-meta"><small class="muted">${esc(dateLabel(m.created))}</small><details class="message-options"><summary aria-label="${t("messageOptions")}" title="${t("messageOptions")}">⋮</summary><div class="message-options-panel">${sender===peer?link("reportMessage",`#report/message/${Number(m.id)}`):""}${action(t("deleteMessage"),`data-delete-message="${Number(m.id)}" data-peer="${peer}"`)}</div></details></div></div>`).join("")}</section>`).join("")}</div>`;
 }
 function scrollChatToLatest() {
   const timeline=document.querySelector(".chat-timeline");
   if (timeline) timeline.scrollTop=timeline.scrollHeight;
 }
 function messagesPage(peer) {
-  return `<h1>${t("messages")}</h1>${messageNavigation("messages")}${demo?`<p class="muted">${t("messageDemo")}</p>`:""}
-    ${peer?link("conversations","#messages"):""}<div id="chat-content">${chatContent(peer)}</div>
+  return `${peer?"":`<h1>${t("messages")}</h1>${messageNavigation("messages")}`}${demo?`<p class="muted">${t("messageDemo")}</p>`:""}
+    <div class="chat-shell"><div id="chat-content">${chatContent(peer)}</div>
     ${peer?`<form id="chat-compose" data-form="chat" data-peer="${peer}" ${canCompose(peer)?"":"hidden"}>
-      ${textArea("message","body","","required maxlength=1500")}<button class="primary">${t("send")}</button></form>`:""}`;
+      <label class="sr-only" for="chat-body">${t("message")}</label><textarea id="chat-body" name="body" rows="2" placeholder="${t("chatPlaceholder")}" required maxlength="1500"></textarea><button class="primary" aria-label="${t("send")}" title="${t("send")}">➤</button></form>`:""}</div>`;
 }
 let chatsRequest;
 function refreshChats() {
