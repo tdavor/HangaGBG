@@ -1,4 +1,6 @@
-# Hänga Gbg 1.6.2 · Android
+# Hänga Gbg 1.7.0 · Android
+
+Version 1.7.0 refreshes the interface with a light Scandinavian palette, four bottom tabs, visible search, category chips, compact friend rows and contextual chat controls. The existing logo is preserved. Android startup shows the same icon artwork and the app name; it clears when the local page loads, without waiting for Firebase. Event covers use category illustrations when no event photo is available.
 
 [**Ladda ner / Download Hänga Gbg för Android (.apk)**](https://github.com/tdavor/HangaGBG/releases/latest/download/HangaGBG.apk)
 
