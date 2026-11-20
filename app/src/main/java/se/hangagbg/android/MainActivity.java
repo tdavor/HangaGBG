@@ -74,8 +74,7 @@ public final class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 webReady = true;
-                // Wait for the local page's first frame, never for a backend response.
-                web.postDelayed(() -> hideSplash(), 120);
+                // The launch splash has its own two-second timer, independent of page loads.
                 openNotification(getIntent());
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -147,8 +146,9 @@ public final class MainActivity extends Activity {
         splash.addView(title,titleParams);
         content.addView(splash,new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,FrameLayout.LayoutParams.MATCH_PARENT));
-        // A failed WebView must not leave an indefinite branded loading screen.
-        web.postDelayed(() -> hideSplash(), 8000);
+        // Keep the launch artwork visible for two seconds, even for a fast local page.
+        // Backend requests and page reloads do not extend or restart this timer.
+        web.postDelayed(() -> hideSplash(), 2000);
     }
 
     private void hideSplash() {
