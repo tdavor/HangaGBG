@@ -1,3 +1,4 @@
+import {validatePhoto,profilePhoto,memberMeetups} from "./profile-media.mjs";
 import {communityAction,eventExtras,notifyFollowers,weeklyStart,sendDueNotices} from "./community.mjs";
 import {socialFields,socialAction,resetPendingProposal,withdrawIdeaMember} from "./social.mjs";
 import {friendAction,friendKey,validFriendNotices,sharedMeetup,canReplyToAdmin} from "./friends.mjs";
@@ -189,13 +190,18 @@ export async function action(db, name, p, identity, env) {
   if (me.blocked) fail("blocked");
   me.admin = me.admin || identity.uid===env.ADMIN_UID;
   const uid = me.id;
-  if (name==="onboard" || name==="me") return {...publicProfile(me),email:identity.email,admin:me.admin || identity.uid===env.ADMIN_UID};
+  if (name==="onboard" || name==="me") return {...publicProfile(me),photo:await profilePhoto(db,uid),email:identity.email,admin:me.admin || identity.uid===env.ADMIN_UID};
+  if(name==="profile_photo") {
+    const photo=validatePhoto(p.photo);
+    if(photo)db.put("profile_photos",uid,{data:photo});else db.remove("profile_photos",uid);
+    return {photo};
+  }
   if (name==="profile") {
     const data = profileData({...p,languages:p.languages??me.languages});
     await requireUniqueName(db,data.name,me);
     const profile = {...me,...data,email:identity.email};
     db.put("profiles",uid,profile);
-    return publicProfile(profile);
+    return {...publicProfile(profile),photo:await profilePhoto(db,uid)};
   }
   const community=await communityAction(db,name,p,me,{text,integer,nextIds,notices});
   if(community!==null) return community;
@@ -209,7 +215,10 @@ export async function action(db, name, p, identity, env) {
       db.get("profiles",id),db.get("blocks",planKey(uid,id)),db.get("blocks",planKey(id,uid))
     ]);
     if (!member || member.deleted || member.blocked || outgoing || incoming) fail("missing");
-    return {id,name:member.name,bio:member.bio||"",languages:member.languages||"",following:!!await db.get("follows",planKey(uid,id))};
+    const [photo,meetups,contact]=await Promise.all([profilePhoto(db,id),memberMeetups(db,id,uid),
+      id===uid?null:friendAction(db,"chat_peer",{peer:id},me,{integer,notices,writeMessage,env})]);
+    return {id,name:member.name,bio:member.bio||"",languages:member.languages||"",photo,meetups,
+      canMessage:!!contact?.canSend,following:!!await db.get("follows",planKey(uid,id))};
   }
   if (name==="messages") return messages(db,uid);
   if (name==="chat_inbox") {
@@ -341,6 +350,7 @@ export async function action(db, name, p, identity, env) {
         db.query("again_matches",[["users","ARRAY_CONTAINS",target.id]]),db.query("again_pairs",[["users","ARRAY_CONTAINS",target.id]]),db.query("friendships",[["users","ARRAY_CONTAINS",target.id]])
       ]);
       db.remove("availability",target.id);
+      db.remove("profile_photos",target.id);
       for(const row of [...additional[0],...additional[1]]) db.remove("follows",planKey(row.follower,row.organizer));
       for(const row of additional[2]) db.remove("feedback",planKey(row.event_id,row.user_id));
       for(const row of additional[3]) db.remove("group_messages",row.id);

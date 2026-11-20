@@ -77,12 +77,13 @@ export default {
     }
     if (request.method!=="POST" || !["/rpc","/alerts"].includes(path)) return reply({error:"missing"},404);
     try {
-      if (Number(request.headers.get("Content-Length"))>16384) throw new Error("invalid");
+      if (Number(request.headers.get("Content-Length"))>70000) throw new Error("invalid");
       const raw=await request.text();
-      if (raw.length>16384) throw new Error("invalid");
+      if (raw.length>70000) throw new Error("invalid");
       let input;
       try { input=JSON.parse(raw); } catch { throw new Error("invalid"); }
       const name=path==="/alerts"?"poll":input?.action;
+      if(name!=="profile_photo"&&raw.length>16384)throw new Error("invalid");
       const p=path==="/alerts"?input:(input?.payload??{});
       if (!p || typeof p!=="object" || Array.isArray(p) || !/^[a-z_]{1,24}$/.test(name||"")) throw new Error("invalid");
       if (name==="due_notices" || (name==="poll" && path!=="/alerts")) throw new Error("missing");
