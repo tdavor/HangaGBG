@@ -28,7 +28,7 @@ import sys
 source = Path("app/src/main/assets")
 html = (source / "index.html").read_text()
 html = html.replace("connect-src https:", "connect-src 'none'")
-html = html.replace("img-src 'self'", "img-src 'self' data:")
+html = html.replace("img-src 'self';", "img-src 'self' data:;")
 brand = b64encode((source / "brand-mark.png").read_bytes()).decode("ascii")
 html = html.replace('src="brand-mark.png"', 'src="data:image/png;base64,' + brand + '"')
 html = html.replace("style-src 'self'; script-src 'self'", "style-src 'unsafe-inline'; script-src 'unsafe-inline'")
@@ -47,7 +47,7 @@ PYTHON
   apk_name=Hanga-Gbg-Demo.apk
 "$tools/aapt2" compile --dir app/src/main/res -o "$out/resources.zip"
 "$tools/aapt2" link -I "$platform" --manifest "$manifest" \
-  --rename-manifest-package "$package_id" --version-code 29 --version-name 1.7.1 \
+  --rename-manifest-package "$package_id" --version-code 30 --version-name 1.8.0 \
   --min-sdk-version 26 --target-sdk-version 35 -A "$assets" --java "$out/generated" --custom-package se.hangagbg.android \
   -o "$out/package.apk" "$out/resources.zip"
 java -m jdk.compiler/com.sun.tools.javac.Main -source 17 -target 17 -classpath "$platform" \

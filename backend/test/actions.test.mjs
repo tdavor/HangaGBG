@@ -141,7 +141,7 @@ test("registered and legacy names block normalized duplicates while member detai
   await assert.rejects(call("profile",{name:" GUEST "}),{message:"nameTaken"});
   await call("profile",{name:"Guest",bio:"Coffee and walks",languages:"Svenska, English"},1);
   const id=people[1].id;
-  assert.deepEqual(await call("member_profile",{id}),{id,name:"Guest",bio:"Coffee and walks",languages:"Svenska, English",following:false});
+  assert.deepEqual(await call("member_profile",{id}),{id,name:"Guest",bio:"Coffee and walks",languages:"Svenska, English",photo:"",meetups:[],canMessage:true,following:false});
   await assert.rejects(call("member_profile",{id},null),{message:"loginRequired"});
   await call("block_person",{id:people[0].id,enabled:true},1);
   await assert.rejects(call("member_profile",{id}),{message:"missing"});
@@ -574,4 +574,63 @@ test('admin contact cannot be spoofed and does not bypass blocks or grant access
   await assert.rejects(call('chat_send',{peer:people[2].id,body:'Blocked contact'}),{message:'messageBlocked'});
   await call('admin_block',{id:people[1].id,blocked:true});
   await assert.rejects(call('chat_send',{peer:people[1].id,body:'Inactive account'}),{message:'missing'});
+});
+
+test('profile photos belong to the caller, stay out of identity lists and are removed with the account',async()=>{
+  const {jpeg}=await import('./fixtures/photo.mjs');
+  const {db,call,people,users}=await app();
+  const uid=people[1].id;
+  await assert.rejects(call('profile_photo',{photo:jpeg},null),{message:'loginRequired'});
+  assert.deepEqual(await call('profile_photo',{photo:jpeg,id:people[2].id},1),{photo:jpeg});
+  assert.equal((await db.get('profile_photos',uid)).data,jpeg);
+  assert.equal(await db.get('profile_photos',people[2].id),undefined);
+  assert.equal((await db.get('profiles',uid)).photo,undefined);
+  assert.equal((await call('me',{},1)).photo,jpeg);
+  assert.equal((await call('profile',{name:'guest',bio:'Coffee',languages:'Svenska'},1)).photo,jpeg);
+  const publicMember=await call('member_profile',{id:uid},2);
+  assert.equal(publicMember.photo,jpeg);
+  assert.equal(publicMember.email,undefined);assert.equal(publicMember.uid,undefined);
+  assert.equal(publicMember.canMessage,false);
+  await assert.rejects(call('chat_send',{peer:uid,body:'Unsolicited'},2),{message:'forbidden'});
+  await call('profile_photo',{photo:''},1);
+  assert.equal((await call('me',{},1)).photo,'');
+  assert.equal(await db.get('profile_photos',uid),undefined);
+  await call('profile_photo',{photo:jpeg},1);
+  users[1].provider='password';users[1].authTime=Date.now()/1000;
+  await call('delete_account',{},1);
+  assert.equal(await db.get('profile_photos',uid),undefined);
+});
+
+test('profile photo validation rejects active formats, oversized, malformed and oversized-dimension data',async()=>{
+  const {jpeg}=await import('./fixtures/photo.mjs');
+  const {call}=await app();
+  for(const photo of [null,'https://example.test/x.jpg','data:image/svg+xml;base64,PHN2Zz4=',jpeg+'x',jpeg.repeat(150),'data:image/jpeg;base64,YWJj']) {
+    await assert.rejects(call('profile_photo',{photo},1),{message:'invalid'});
+  }
+  const bytes=Buffer.from(jpeg.slice(23),'base64');
+  const sof=bytes.indexOf(Buffer.from([255,192]));assert.ok(sof>0);
+  bytes[sof+5]=10;bytes[sof+6]=0;
+  await assert.rejects(call('profile_photo',{photo:'data:image/jpeg;base64,'+bytes.toString('base64')},1),{message:'invalid'});
+});
+
+test('member event lists expose organized and joined meetups without saved, private or blocked-owner details',async()=>{
+  const {call,db,people,event,id}=await app();
+  await call('join',{id,enabled:true},1);
+  const owned=await call('create',{...event,title:'Guest walk',capacity:3},1);
+  const saved=await call('create',{...event,title:'Saved only',capacity:3});
+  await call('save',{id:saved.id,enabled:true},1);
+  const hidden=await call('create',{...event,title:'Hidden',capacity:3},1);
+  db.put('events',hidden.id,{...await db.get('events',hidden.id),hidden:true,meetingNote:'secret',email:'secret@test.invalid'});
+  const cancelled=await call('create',{...event,title:'Cancelled'},1);
+  await call('cancel',{id:cancelled.id},1);
+  let member=await call('member_profile',{id:people[1].id},2);
+  assert.deepEqual(new Set(member.meetups.map(e=>e.id)),new Set([id,owned.id]));
+  assert.equal(member.meetups.find(e=>e.id===id).organized,false);
+  assert.equal(member.meetups.find(e=>e.id===owned.id).organized,true);
+  assert.doesNotMatch(JSON.stringify(member),/@|meetingNote|authTime|email|uid/);
+  await call('block_person',{id:people[0].id,enabled:true},2);
+  member=await call('member_profile',{id:people[1].id},2);
+  assert.deepEqual(member.meetups.map(e=>e.id),[owned.id]);
+  await call('block_person',{id:people[1].id,enabled:true},2);
+  await assert.rejects(call('member_profile',{id:people[1].id},2),{message:'missing'});
 });

@@ -251,3 +251,20 @@ test('redesign keeps essential routes, visible search, safe friend rows and logo
   assert.match(main,/web.postDelayed\(\(\) -> hideSplash\(\), 2000\)/);
   assert.doesNotMatch(main,/hideSplash\(\), (120|8000)\)/);
 });
+
+test('member profile has photo, name, chat, languages and distinct meetup roles without email disclosure',()=>{
+  const run=ui();
+  run(`memberProfile={id:2,name:'Anna',email:'private@test.invalid',uid:'firebase-secret',photo:'data:image/jpeg;base64,/9j/2Q==',bio:'Walks',languages:'Svenska, English',canMessage:false,meetups:[{id:11,title:'Hosted walk',start:new Date().toISOString(),organized:true,organizer:'Anna',area:'Tuve'},{id:12,title:'Attending fika',start:new Date().toISOString(),organized:false,organizer:'Erik',area:'Linné'}]};events.push(...memberProfile.meetups)`);
+  for(const language of ['sv','en']) {
+    const html=run(`lang='${language}';memberPage(2)`);
+    assert.match(html,/<img class="avatar avatar-photo"/);
+    assert.match(html,/#messages\/2/);assert.match(html,/Svenska, English/);
+    assert.match(html,/#event\/11/);assert.match(html,/#event\/12/);
+    assert.doesNotMatch(html,/private@test|firebase-secret/);
+    assert.doesNotMatch(run('events=[];memberMeetupCard(memberProfile.meetups[0])'),/href=/);
+    run('events.push(...memberProfile.meetups)');
+    assert.match(run('profilePage()'),/type="file" accept="image\/jpeg,image\/png,image\/webp"/);
+    assert.match(run(`avatar('Anna','javascript:alert(1)')`),/>A<\/span>/);
+    assert.match(run(`avatar('Anna','https://tracker.invalid/image')`),/>A<\/span>/);
+  }
+});

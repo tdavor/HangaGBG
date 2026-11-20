@@ -1,6 +1,8 @@
 "use strict";
 
 const copy = {
+  profilePhoto:["Profilbild","Profile photo"], changePhoto:["Välj profilbild","Choose profile photo"], removePhoto:["Ta bort bild","Remove photo"], photoHelp:["Välj en bild från telefonen. Den beskärs till en kvadrat och visas på din offentliga profil.","Choose a photo from your phone. It is cropped to a square and shown on your public profile."], photoSaved:["Profilbilden har sparats.","Profile photo saved."], photoInvalid:["Välj en JPG-, PNG- eller WebP-bild på högst 10 MB.","Choose a JPG, PNG or WebP image up to 10 MB."], photoSaving:["Sparar bilden…","Saving photo…"], organizedMeetups:["Organiserade träffar","Meetups organized"], participatingMeetups:["Deltar i","Meetups attending"], noPublicMeetups:["Inga offentliga träffar att visa.","No public meetups to show."], contactRule:["Du kan skriva när ni är vänner eller deltar i samma träff. Tidigare konversationer kan fortfarande läsas.","You can send messages when you are friends or attend the same meetup. Previous conversations remain readable."], privateEmail:["Din e-post visas aldrig på den offentliga profilen.","Your email is never shown on your public profile."],
+
   userCreatedMeetups:["Träffar skapade av användare","Meetups created by users"], mixedSourcesHint:["Även Göteborgs stadskalender visas. Välj källa i filtren.","Göteborg’s city calendar is also included. Choose a source in the filters."],
   noFriendRequests:["Inga nya vänförfrågningar.","No new friend requests."],
   homeTitle:["Hitta ditt sällskap","Find your company"], homeIntro:["Små möten. Nya vänner. Nära dig.","Small meetups. New friends. Close to you."], explore:["Upptäck","Discover"], createShort:["Skapa","Create"], profileShort:["Profil","Profile"], mainNavigation:["Huvudnavigation","Main navigation"], supportCoffee:["Bjud på en kaffe","Buy me a coffee"], nearbyMeetups:["Träffar nära dig","Meetups near you"], searchFriends:["Sök bland vänner","Search friends"], myFriends:["Mina vänner","My friends"], noFriendsFound:["Inga vänner matchar din sökning.","No friends match your search."], viewMeetup:["Visa träffen","View meetup"], filterShort:["Filter","Filters"], searchMeetups:["Vad vill du hitta på?","What would you like to do?"],
@@ -473,6 +475,7 @@ function demoApi(path, body) {
       Object.assign(data.user,{name,email,area,bio,interests,languages});
     }
     result=data.user;
+  } else if(path==="/me/photo") {data.user.photo=body.photo;result={photo:body.photo};
   } else if (path==="/account/delete") {
     localStorage.removeItem("demoData");
     return {};
@@ -630,7 +633,9 @@ function icon(name) {
   const paths={search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/>',plus:'<path d="M12 4v16M4 12h16"/>',person:'<circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/>',friends:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 5v2"/>',message:'<path d="M21 15a3 3 0 0 1-3 3H8l-5 4V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z"/>',gear:'<path d="m9 3 1-2h4l1 2 3 2 2 .5 2 3-1 2v3l1 2-2 3-2 .5-3 2-1 2h-4l-1-2-3-2-2-.5-2-3 1-2v-3l-1-2 2-3L6 5z"/><circle cx="12" cy="12" r="3"/>',walk:'<circle cx="14" cy="4" r="2"/><path d="m7 21 4-8 4 3 1 5M4 11l5-3 4 1 3 4h4M11 8l-1 6"/>',fika:'<path d="M4 8h12v7a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 9h2a3 3 0 0 1 0 6h-2M7 2v3m5-3v3M2 23h17"/>',culture:'<path d="m2 8 10-6 10 6zM5 10v9m7-9v9m7-9v9M2 22h20"/>',other:'<path d="m12 2 3 6 7 1-5 5 1 8-6-4-6 4 1-8-5-5 7-1z"/>'};
   return `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.other}</svg>`;
 }
-function avatar(name) {return `<span class="avatar" aria-hidden="true">${esc(String(name||"?").trim().split(/\s+/).slice(0,2).map(x=>[...x][0]||"").join("").toUpperCase())}</span>`;}
+function avatar(name,photo="") {
+  if(typeof photo==="string"&&photo.length<=65536&&/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(photo))return `<img class="avatar avatar-photo" src="${esc(photo)}" alt="">`;
+  return `<span class="avatar" aria-hidden="true">${esc(String(name||"?").trim().split(/\s+/).slice(0,2).map(x=>[...x][0]||"").join("").toUpperCase())}</span>`;}
 function bottomNavigation(page) {
   return `<nav class="bottom-nav" aria-label="${t("mainNavigation")}">${[["discover","search","explore"],["plans","calendar","plans"],["create","plus","createShort"],["profile","person","profileShort"]].map(([key,symbol,label])=>`<a href="#${key}" ${page===key?'aria-current="page"':""}>${icon(symbol)}<span>${t(label)}</span></a>`).join("")}</nav>`;
 }
@@ -1101,14 +1106,57 @@ function plansPage() {
 function memberLink(id,name) {
   return user && !demo && Number(id)>0 ? `<a href="#member/${Number(id)}">${esc(name)}</a>` : esc(name);
 }
+function memberMeetupCard(e) {
+  const title=`<strong>${esc(eventTitle(e))}</strong>`;
+  return `<article class="member-meetup">${events.some(row=>row.id===e.id)?`<a href="#event/${Number(e.id)}">${title}</a>`:title}<p class="muted">${esc(dateLabel(e.start))} · ${esc(e.area)}</p><small>${esc(e.organizer)}</small></article>`;
+}
 function memberPage(id) {
   const member=memberProfile?.id===id?memberProfile:null;
-  return `<h1>${member?esc(member.name):t("memberProfile")}</h1>${member?`<section class="card">
-    ${member.bio?`<h2>${t("bio")}</h2><p>${esc(member.bio)}</p>`:""}
-    ${member.languages?`<h2>${t("spokenLanguages")}</h2><p>${esc(member.languages)}</p>`:""}
-    ${!demo&&user.id!==id?`<div class="actions">${action(t(member.following?"unfollow":"follow"),`data-follow="${id}" data-enabled="${!member.following}"`)}${friendControls(id)}</div>`:""}
-    </section>${safetyActions(id,"person",id)}`:""}`;
+  if(!member)return `<h1>${t("memberProfile")}</h1>`;
+  const organized=(member.meetups||[]).filter(e=>e.organized),participating=(member.meetups||[]).filter(e=>!e.organized);
+  return `<section class="member-heading">${avatar(member.name,member.photo)}<h1>${esc(member.name)}</h1>
+    ${user.id!==id?`<a class="action primary" href="#messages/${Number(id)}">${icon("message")}${t("message")}</a>${member.canMessage===false?`<p class="muted contact-rule">${t("contactRule")}</p>`:""}`:""}</section>
+    <section class="card">${member.bio?`<h2>${t("bio")}</h2><p>${esc(member.bio)}</p>`:""}
+    <h2>${t("spokenLanguages")}</h2><p>${esc(member.languages)||t("none")}</p>
+    ${!demo&&user.id!==id?`<div class="actions">${action(t(member.following?"unfollow":"follow"),`data-follow="${id}" data-enabled="${!member.following}"`)}${friendControls(id)}</div>`:""}</section>
+    <section class="card"><h2>${t("organizedMeetups")} · ${organized.length}</h2>${organized.map(memberMeetupCard).join("")||`<p class="muted">${t("noPublicMeetups")}</p>`}</section>
+    <section class="card"><h2>${t("participatingMeetups")} · ${participating.length}</h2>${participating.map(memberMeetupCard).join("")||`<p class="muted">${t("noPublicMeetups")}</p>`}</section>
+    ${safetyActions(id,"person",id)}`;
 }
+function photoEditor() {
+  return `<h2>${t("profilePhoto")}</h2><div class="photo-editor-row">${avatar(user.name,user.photo)}<div><label class="photo-choose">${t("changePhoto")}<input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp"></label>${user.photo?action(t("removePhoto"),"data-remove-photo","danger"):""}</div></div><p class="muted">${t("photoHelp")}</p>`;
+}
+async function prepareProfilePhoto(file) {
+  if(!file||!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)throw new Error("photoInvalid");
+  const source=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error("photoInvalid"));reader.readAsDataURL(file);});
+  const image=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error("photoInvalid"));img.src=source;});
+  if(!image.naturalWidth||!image.naturalHeight)throw new Error("photoInvalid");
+  const canvas=document.createElement("canvas");canvas.width=256;canvas.height=256;
+  const context=canvas.getContext("2d");context.fillStyle="#fff";context.fillRect(0,0,256,256);
+  const size=Math.min(image.naturalWidth,image.naturalHeight);
+  context.drawImage(image,(image.naturalWidth-size)/2,(image.naturalHeight-size)/2,size,size,0,0,256,256);
+  for(const quality of [.85,.7,.5]){const data=canvas.toDataURL("image/jpeg",quality);if(data.length<=65536)return data;}
+  throw new Error("photoInvalid");
+}
+let photoBusy=false;
+async function saveProfilePhoto(file,remove=false) {
+  if(photoBusy||!user)return;
+  photoBusy=true;const owner=user.id;
+  const input=$("profile-photo-input"),button=document.querySelector("[data-remove-photo]");
+  if(input)input.disabled=true;if(button)button.disabled=true;
+  try {
+    status("photoSaving");
+    const photo=remove?"":await prepareProfilePhoto(file);
+    if(user?.id!==owner)return;
+    const result=await api("/me/photo",{photo});
+    if(user?.id!==owner)return;
+    user.photo=result.photo;
+    if(route()[0]==="profile"&&$("profile-photo-editor"))$("profile-photo-editor").innerHTML=photoEditor();
+    status("photoSaved");
+  } catch(error){if(user?.id===owner)status(error.message);}
+  finally {photoBusy=false;if(input){input.disabled=false;input.value="";}if(button)button.disabled=false;}
+}
+
 function profilePage() {
   const language=`<div class="card">${select("interfaceLanguage","appLanguage",[["sv","Svenska"],["en","English"]],lang)}</div>`;
   if (!user) return `<h1>${t("profile")}</h1>${language}<p>${t("loginRequired")}</p>${link("login","#auth","primary")}`;
@@ -1123,11 +1171,12 @@ function profilePage() {
       </div>
     </details></div>
     ${language}
+    <section class="card" id="profile-photo-editor">${photoEditor()}</section>
     ${!demo?`<details class="card"><summary>${t("followingTitle")}</summary>${followingPeople.map(p=>`<p>${memberLink(p.id,p.name)}</p>`).join("")||`<p>${t("none")}</p>`}</details>`:""}
     ${blockedPeople.length?`<details id="profile-blocked" hidden><summary>${t("blockedPeople")}</summary>${blockedPeople.map(p=>
       `<p>${esc(p.name)} ${action(t("unblockPerson"),`data-block-person="${Number(p.id)}" data-value="false"`)}</p>`).join("")}</details>`:""}
     <form data-form="profile">
-      ${field("name","name",user.name,"text",'required maxlength="80"')}${field("email","email",user.email,"email","required")}
+      ${field("name","name",user.name,"text",'required maxlength="80"')}${field("email","email",user.email,"email","required")}<small class="muted">${t("privateEmail")}</small>
       ${areaSelect(user.area)}${textArea("bio","bio",user.bio,'maxlength="1500"')}
       ${field("interests","interests",user.interests,"text",'maxlength="300"')}
       ${field("spokenLanguages","languages",user.languages,"text",'maxlength="150"')}
@@ -1162,7 +1211,7 @@ function adminPage() {
 function friendControls(id) {
   if(friendContext?.id!==id) return "";
   const state=friendContext.status;
-  if(state==="accepted") return `${link("message",`#messages/${id}`,"primary")}${link("inviteFriend",`#friends/invite/${id}`)}`;
+  if(state==="accepted") return link("inviteFriend",`#friends/invite/${id}`);
   if(state==="incoming") return `${action(t("acceptFriend"),`data-friend-reply="${id}" data-accept="true"`,"primary")}${action(t("declineFriend"),`data-friend-reply="${id}" data-accept="false"`)}`;
   if(state==="outgoing") return `<span class="muted">${t("friendPending")}</span>`;
   return friendContext.canRequest?action(t("addFriend"),`data-add-friend="${id}"`):"";
@@ -1516,6 +1565,7 @@ document.addEventListener("click",async event=>{
   const button=event.target.closest("button[type=button]");
   if (!button) return;
   const d=button.dataset;
+  if("removePhoto" in d){await saveProfilePhoto(null,true);return;}
   if (d.friendTab) {
     friendTab=d.friendTab;
     document.querySelectorAll("[data-friend-section]").forEach(section=>section.hidden=section.dataset.friendSection!==friendTab);
@@ -1660,6 +1710,7 @@ document.addEventListener("click",async event=>{
   finally { button.disabled=false; }
 });
 document.addEventListener("change",event=>{
+  if(event.target.id==="profile-photo-input"&&event.target.files?.[0]){void saveProfilePhoto(event.target.files[0]);return;}
   const form=event.target.form;
   if(form?.dataset.form==="event") {
     if(event.target.name==="meetupMode") {
