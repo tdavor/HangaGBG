@@ -124,3 +124,5 @@ button:hover,a.action:hover{background:#edf2e6}.primary,a.action.primary{backgro
   .conversation-page .chat-heading{flex:none}.conversation-page .chat-timeline{height:auto;flex:1;min-height:4rem}
   .conversation-page #chat-compose{flex:none}
 }
+
+.category-chips{flex-wrap:wrap;overflow:visible}.create-meetup{display:inline-flex;gap:.45rem;margin:.5rem 0 .75rem}.account-menu-panel>a{gap:.45rem}

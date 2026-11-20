@@ -223,7 +223,10 @@ test('redesign keeps essential routes, visible search, safe friend rows and logo
     assert.match(home,/data-toggle-filters[^>]*><svg/);
     assert.doesNotMatch(home,/&lt;svg/);
     assert.match(home,/data-category="walk"/);
-    assert.match(home,/buymeacoffee.com\/wjkrddbhyx/);
+    assert.doesNotMatch(home,/buymeacoffee.com/);
+    assert.match(home,/class="action primary create-meetup" href="#create"/);
+    for(const category of run("cats")) assert.match(home,new RegExp('data-category="'+category+'"'));
+    assert.match(run('headerNavigation("discover")'),/buymeacoffee.com\/wjkrddbhyx/);
     assert.match(home,/id="advanced-filters"/);
     const nav=run('bottomNavigation("plans")');
     assert.match(nav,/#plans" aria-current="page"/);
@@ -244,5 +247,6 @@ test('redesign keeps essential routes, visible search, safe friend rows and logo
   const android12=readFileSync(new URL('../../app/src/main/res/values-v31/styles.xml',import.meta.url),'utf8');
   assert.match(main,/setImageResource\(R.drawable.logo_mark\)/);
   assert.match(android12,/@drawable\/logo_mark/);
-  assert.match(main,/onPageFinished[\s\S]*hideSplash\(\)/);
+  assert.match(main,/web.postDelayed\(\(\) -> hideSplash\(\), 2000\)/);
+  assert.doesNotMatch(main,/hideSplash\(\), (120|8000)\)/);
 });

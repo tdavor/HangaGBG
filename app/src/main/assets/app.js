@@ -636,7 +636,7 @@ function bottomNavigation(page) {
 function headerNavigation(page) {
   const pages=["notices","about"];
   if(user?.admin) pages.push("admin");
-  return `<a class="messages-shortcut action" href="#messages" aria-label="${t("messages")}" title="${t("messages")}" ${page==="messages"?'aria-current="page"':""}>${icon("message")}<span id="unread-messages" class="message-count" hidden></span></a><a class="friends-shortcut action" href="#friends" aria-label="${t("friends")}" title="${t("friends")}" ${page==="friends"?'aria-current="page"':""}>${icon("friends")}</a><details class="account-menu settings-menu"><summary aria-label="${t("appMenu")}" title="${t("appMenu")}">${icon("gear")}</summary><nav class="account-menu-panel" aria-label="${t("appMenu")}">${pages.map(key=>`<a class="action" href="#${key}" ${page===key?'aria-current="page"':""}>${t(key)}</a>`).join("")}</nav></details>`;
+  return `<a class="messages-shortcut action" href="#messages" aria-label="${t("messages")}" title="${t("messages")}" ${page==="messages"?'aria-current="page"':""}>${icon("message")}<span id="unread-messages" class="message-count" hidden></span></a><a class="friends-shortcut action" href="#friends" aria-label="${t("friends")}" title="${t("friends")}" ${page==="friends"?'aria-current="page"':""}>${icon("friends")}</a><details class="account-menu settings-menu"><summary aria-label="${t("appMenu")}" title="${t("appMenu")}">${icon("gear")}</summary><nav class="account-menu-panel" aria-label="${t("appMenu")}">${pages.map(key=>`<a class="action" href="#${key}" ${page===key?'aria-current="page"':""}>${t(key)}</a>`).join("")}<a class="action" href="${supportUrl}">${icon("fika")}${t("supportCoffee")}</a></nav></details>`;
 }
 function render() {
   const [page,id,recipient]=route();
@@ -818,10 +818,10 @@ function feedbackPage(id) {
       <button class="primary">${t("save")}</button></form>`;
 }
 function discoverPage() {
-  return `<section class="home-intro"><h1>${t("homeTitle")}</h1><p>${t("homeIntro")}</p><a class="action coffee-support" href="${supportUrl}">${icon("fika")}${t("supportCoffee")}</a></section>
+  return `<section class="home-intro"><h1>${t("homeTitle")}</h1><p>${t("homeIntro")}</p><a class="action primary create-meetup" href="#create">${icon("plus")}${t("create")}</a></section>
     ${demo?`<p class="muted">${t("demoBanner")}</p>`:!base?`<p>${t("setup")}</p>${link("connect","#connect")}`:""}
     <form id="filter" class="discovery-search" role="search"><div class="search-row"><label class="search-field">${icon("search")}<span class="sr-only">${t("keyword")}</span><input name="query" type="search" value="${esc(filters.query)}" placeholder="${t("searchMeetups")}"></label><button type="button" data-toggle-filters aria-label="${t("searchFilters")}" aria-expanded="${hasFilters()}">${icon("gear")}</button></div>
-    <div class="category-chips" aria-label="${t("category")}">${[["","all"],["walk","walk"],["fika","fika"],["culture","culture"]].filter(([key])=>!key||cats.includes(key)).map(([key,label])=>action(t(label),`data-category="${key}" aria-pressed="${filters.category===key}"`)).join("")}</div>
+    <div class="category-chips" aria-label="${t("category")}">${[["","all"],...cats.map(key=>[key,key])].map(([key,label])=>action(t(label),`data-category="${key}" aria-pressed="${filters.category===key}"`)).join("")}</div>
     <details id="advanced-filters" class="discover-filters" ${hasFilters()?"open":""}><summary>${t("searchFilters")}</summary><div class="grid">
       ${select("area","area",[["",t("anyArea")],...areas.map(x=>[x,x]),["other",t("other")]],filters.area)}
       ${select("category","category",[["",t("all")],...cats.map(x=>[x,t(x)])],filters.category)}
