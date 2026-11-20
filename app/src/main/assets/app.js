@@ -1,6 +1,9 @@
 "use strict";
 
 const copy = {
+  noFriendRequests:["Inga nya vänförfrågningar.","No new friend requests."],
+  homeTitle:["Hitta ditt sällskap","Find your company"], homeIntro:["Små möten. Nya vänner. Nära dig.","Small meetups. New friends. Close to you."], explore:["Upptäck","Discover"], createShort:["Skapa","Create"], profileShort:["Profil","Profile"], mainNavigation:["Huvudnavigation","Main navigation"], supportCoffee:["Bjud på en kaffe","Buy me a coffee"], nearbyMeetups:["Träffar nära dig","Meetups near you"], searchFriends:["Sök bland vänner","Search friends"], myFriends:["Mina vänner","My friends"], noFriendsFound:["Inga vänner matchar din sökning.","No friends match your search."], viewMeetup:["Visa träffen","View meetup"], filterShort:["Filter","Filters"], searchMeetups:["Vad vill du hitta på?","What would you like to do?"],
+
   adminMessage:["Skriv meddelande","Message user"], adminSender:["Från administratören","From the administrator"],
   adminChatHelp:["Privat kontakt mellan administratören och användaren. Användaren kan svara här utan en gemensam träff eller vänskap.","Private contact between the administrator and the user. The user can reply here without a shared meetup or friendship."],
 
@@ -227,6 +230,7 @@ let blockedPeople=[];
 let memberProfile = null;
 let availability=[],followingPeople=[],groupRows=[],groupEventId=0,feedbackData={},againRows=[],againEventId=0;
 let friends=[],friendContext=null,chatPeer=null;
+let friendSearch="",friendTab="friends";
 let user = null, events = [], messageList = [], noticeList = [], admin = null;
 let cityItems = [], cityRequest, cityLoadedAt = 0, cityUnavailable = false, cityExpiryTimer;
 const cityId = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
@@ -407,7 +411,7 @@ function syncAlertProfile() {
 window.hangaSyncAlerts=syncAlertProfile;
 function session(result) {
   messageList=[];
-  availability=[];followingPeople=[];groupRows=[];groupEventId=0;feedbackData={};againRows=[];againEventId=0;friends=[];friendContext=null;chatPeer=null;
+  availability=[];followingPeople=[];groupRows=[];groupEventId=0;feedbackData={};againRows=[];againEventId=0;friends=[];friendContext=null;chatPeer=null;friendSearch="";friendTab="friends";
   token=result?.token || "";
   user=result?.user || null;
   if (demo) {
@@ -621,17 +625,25 @@ function hasArea(event,area) {
   if (area==="other") return !areas.includes(event.area);
   return event.area===area;
 }
+function icon(name) {
+  const paths={search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/>',plus:'<path d="M12 4v16M4 12h16"/>',person:'<circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/>',friends:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 5v2"/>',message:'<path d="M21 15a3 3 0 0 1-3 3H8l-5 4V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z"/>',gear:'<path d="m9 3 1-2h4l1 2 3 2 2 .5 2 3-1 2v3l1 2-2 3-2 .5-3 2-1 2h-4l-1-2-3-2-2-.5-2-3 1-2v-3l-1-2 2-3L6 5z"/><circle cx="12" cy="12" r="3"/>',walk:'<circle cx="14" cy="4" r="2"/><path d="m7 21 4-8 4 3 1 5M4 11l5-3 4 1 3 4h4M11 8l-1 6"/>',fika:'<path d="M4 8h12v7a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 9h2a3 3 0 0 1 0 6h-2M7 2v3m5-3v3M2 23h17"/>',culture:'<path d="m2 8 10-6 10 6zM5 10v9m7-9v9m7-9v9M2 22h20"/>',other:'<path d="m12 2 3 6 7 1-5 5 1 8-6-4-6 4 1-8-5-5 7-1z"/>'};
+  return `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.other}</svg>`;
+}
+function avatar(name) {return `<span class="avatar" aria-hidden="true">${esc(String(name||"?").trim().split(/\s+/).slice(0,2).map(x=>[...x][0]||"").join("").toUpperCase())}</span>`;}
+function bottomNavigation(page) {
+  return `<nav class="bottom-nav" aria-label="${t("mainNavigation")}">${[["discover","search","explore"],["plans","calendar","plans"],["create","plus","createShort"],["profile","person","profileShort"]].map(([key,symbol,label])=>`<a href="#${key}" ${page===key?'aria-current="page"':""}>${icon(symbol)}<span>${t(label)}</span></a>`).join("")}</nav>`;
+}
+function headerNavigation(page) {
+  const pages=["notices","about"];
+  if(user?.admin) pages.push("admin");
+  return `<a class="messages-shortcut action" href="#messages" aria-label="${t("messages")}" title="${t("messages")}" ${page==="messages"?'aria-current="page"':""}>${icon("message")}<span id="unread-messages" class="message-count" hidden></span></a><a class="friends-shortcut action" href="#friends" aria-label="${t("friends")}" title="${t("friends")}" ${page==="friends"?'aria-current="page"':""}>${icon("friends")}</a><details class="account-menu settings-menu"><summary aria-label="${t("appMenu")}" title="${t("appMenu")}">${icon("gear")}</summary><nav class="account-menu-panel" aria-label="${t("appMenu")}">${pages.map(key=>`<a class="action" href="#${key}" ${page===key?'aria-current="page"':""}>${t(key)}</a>`).join("")}</nav></details>`;
+}
 function render() {
   const [page,id,recipient]=route();
   document.documentElement.lang=lang;
-  const pages=["discover","plans","create","notices","profile","about"];
-  if (user?.admin) pages.push("admin");
-  const menuLinks=pages.map(key=>`<a class="action" href="#${key}" ${page===key?'aria-current="page"':""}>${t(key)}</a>`).join("");
-  $("header-actions").innerHTML=`<a class="messages-shortcut action" href="#messages" aria-label="${t("messages")}" title="${t("messages")}" ${page==="messages"?'aria-current="page"':""}>
-    <span aria-hidden="true">✉</span><span id="unread-messages" class="message-count" hidden></span></a><a class="friends-shortcut action" href="#friends" aria-label="${t("friends")}" title="${t("friends")}" ${page==="friends"?'aria-current="page"':""}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 5v2"/></svg></a><details class="account-menu settings-menu">
-    <summary aria-label="${t("appMenu")}" title="${t("appMenu")}"><span aria-hidden="true">⚙</span></summary>
-    <nav class="account-menu-panel" aria-label="${t("appMenu")}">${menuLinks}</nav>
-  </details>`;
+  $("header-actions").innerHTML=headerNavigation(page);
+  if($("bottom-navigation")) $("bottom-navigation").innerHTML=bottomNavigation(page);
+  $("main").className=page==="messages"&&Number(id)>0?"conversation-page":"";
   updateChatBadge();
   let html;
   if (page==="about") html=aboutPage();
@@ -664,6 +676,7 @@ function render() {
   else if (page==="messages") html=messagesPage(Number(id));
   else if (page==="notices") html=noticesPage();
   else html=discoverPage();
+  if(page==="create"&&!id&&user) html=`<div class="actions">${link("quick","#create/quick")}</div>`+html;
   $("main").innerHTML=html;
   if (page==="messages") scrollChatToLatest();
   if (page==="group" && $("group-content")) $("group-content").scrollTop=$("group-content").scrollHeight;
@@ -721,8 +734,8 @@ function todayCompany(all=false) {
   return `<div class="rows between"><h2>${t("todayCompany")}</h2>${!all&&!own?link("availableToday","#availability"):""}</div>
     ${own&&!all?`<section class="my-availability"><strong>${t("myAvailability")}</strong><p>${availabilitySummary(own)}</p>
       <div class="actions">${link("editAvailability","#availability")}${action(t("removeAvailability"),"data-remove-availability","danger")}</div></section>`:""}
-    ${current.length?`<ul class="availability-list">${(all?current:current.slice(0,3)).map(entry=>`<li>
-      ${memberLink(entry.user_id,entry.name)} · ${availabilitySummary(entry)}
+    ${current.length?`<ul class="availability-list company-grid">${(all?current:current.slice(0,3)).map(entry=>`<li>
+      ${avatar(entry.name)}<div>${memberLink(entry.user_id,entry.name)}<p>${availabilitySummary(entry)}</p></div>
       </li>`).join("")}</ul>${!all&&current.length>3?link("viewAvailability","#availability"):""}`:!own?`<p class="muted">${t("todayEmpty")}</p>`:""}`;
 }
 function availabilityPage() {
@@ -805,20 +818,20 @@ function feedbackPage(id) {
       <button class="primary">${t("save")}</button></form>`;
 }
 function discoverPage() {
-  return `<section class="hero"><h1>${t("browse")}</h1><p>${t("intro")}</p><div class="actions">${link("quick","#create/quick","primary")}${link("create","#create")} ${action(t("browseEvents"),"data-browse-events")}</div></section>
+  return `<section class="home-intro"><h1>${t("homeTitle")}</h1><p>${t("homeIntro")}</p><a class="action coffee-support" href="${supportUrl}">${icon("fika")}${t("supportCoffee")}</a></section>
     ${demo?`<p class="muted">${t("demoBanner")}</p>`:!base?`<p>${t("setup")}</p>${link("connect","#connect")}`:""}
-    ${!demo&&user?`<section id="today-company" class="card">${todayCompany()}</section>`:""}
-    <details class="discover-filters" ${hasFilters()?"open":""}><summary>${t("searchFilters")}</summary>
-    <form id="filter" class="grid">
-      <div class="wide">${field("keyword","query",filters.query,"search",`placeholder="${t("search")}"`)}</div>
+    <form id="filter" class="discovery-search" role="search"><div class="search-row"><label class="search-field">${icon("search")}<span class="sr-only">${t("keyword")}</span><input name="query" type="search" value="${esc(filters.query)}" placeholder="${t("searchMeetups")}"></label><button type="button" data-toggle-filters aria-label="${t("searchFilters")}" aria-expanded="${hasFilters()}">${icon("gear")}</button></div>
+    <div class="category-chips" aria-label="${t("category")}">${[["","all"],["walk","walk"],["fika","fika"],["culture","culture"]].filter(([key])=>!key||cats.includes(key)).map(([key,label])=>action(t(label),`data-category="${key}" aria-pressed="${filters.category===key}"`)).join("")}</div>
+    <details id="advanced-filters" class="discover-filters" ${hasFilters()?"open":""}><summary>${t("searchFilters")}</summary><div class="grid">
       ${select("area","area",[["",t("anyArea")],...areas.map(x=>[x,x]),["other",t("other")]],filters.area)}
       ${select("category","category",[["",t("all")],...cats.map(x=>[x,t(x)])],filters.category)}
       ${select("atmosphereFilter","mood",[["",t("all")],...moods.filter(Boolean).map(x=>[x,t(x)])],filters.mood)}
       ${demo?"":select("eventSource","eventSource",[["",t("all")],["community",t("communityEvents")],["city",t("cityCalendar")]],filters.eventSource)}
       ${select("events","period",["upcoming","today","tonight"].map(x=>[x,t(x)]),filters.period)}
       <label class="check wide"><input type="checkbox" name="newcomers" ${filters.newcomers?"checked":""}> ${t("newcomers")}</label>
-    </form></details>
-    <h2 id="browse-heading" tabindex="-1">${t("browseEvents")}</h2>
+    </div></details></form>
+    ${!demo&&user?`<section id="today-company" class="company-section">${todayCompany()}</section>`:""}
+    <div class="section-heading"><h2 id="browse-heading" tabindex="-1">${t("nearbyMeetups")}</h2>${action(t("browseEvents"),"data-browse-events","text-action")}</div>
     <section id="results" aria-live="polite">${renderedResults=results()}</section>`;
 }
 function refreshResults() {
@@ -831,6 +844,9 @@ function focusEventList() {
   const heading=$("browse-heading");
   heading.focus({preventScroll:true});
   heading.scrollIntoView({block:"start"});
+}
+function syncCategoryChips() {
+  document.querySelectorAll("[data-category]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.category===filters.category)));
 }
 function hasFilters() {
   return Boolean(filters.query.trim() || filters.area || filters.category ||
@@ -893,7 +909,7 @@ function cityActions(event) {
     ${link("arrangeCityMeetup",user?`#create/city/${esc(event.id)}`:`#auth/login/${esc(event.id)}`,"primary")}</div>`;
 }
 function cityCard(event) {
-  return `<article class="card city-card"><span class="pill">${t("cityCalendar")}</span>
+  return `<article class="card event-card city-card"><a class="event-cover cover-culture" href="#city/${esc(event.id)}" tabindex="-1" aria-hidden="true">${icon("culture")}</a><span class="pill">${t("cityCalendar")}</span>
     <h2><a href="#city/${esc(event.id)}">${esc(event.title)}</a></h2>
     <p class="muted">${esc(dateLabel(event.start))}${event.end!==event.start?" – "+esc(dateLabel(event.end)):""}${event.place?" · "+esc(event.place):""}</p>
     ${Date.parse(event.start)<=Date.now()?`<span class="pill">${t("cityOngoing")}</span>`:""}</article>`;
@@ -908,10 +924,10 @@ function cityPage(event) {
     ${meetups.length?`<h2>${t("cityMeetups")}</h2>${meetups.map(e=>card(e)).join("")}`:""}`;
 }
 function card(e,controls="") {
-  return `<article class="card"><div class="rows between"><span class="pill">${esc(t(e.category))}</span><span class="pill">${price(e)}</span></div>
+  return `<article class="card event-card"><a class="event-cover cover-${cats.includes(e.category)?e.category:"other"}" href="#event/${Number(e.id)}" tabindex="-1" aria-hidden="true">${icon(e.category)}</a><div class="rows between"><span class="pill">${esc(t(e.category))}</span><span class="pill">${price(e)}</span></div>
     ${eventBadges(e)}<h2><a href="#event/${Number(e.id)}">${esc(eventTitle(e))}</a></h2>
     <p class="muted">${esc(dateLabel(e.start))} · ${eventAddress(e)}</p>
-    <p>${e.minPeople&&e.proposalPhase!=="active"?`${Number(e.interestCount||0)+1}/${Number(e.minPeople)} ${t("interestCount")}`:`${Number(e.count)}/${Number(e.capacity)} ${t("attendees").toLowerCase()}`}${e.hidden?" · "+t("hidden"):""}</p>${e.mood?`<span class="pill">${t(e.mood)}</span>`:""}${e.walkGoal?`<span class="pill"> · ${t("walk_"+e.walkGoal)}</span>`:""}${controls}</article>`;
+    <p>${e.minPeople&&e.proposalPhase!=="active"?`${Number(e.interestCount||0)+1}/${Number(e.minPeople)} ${t("interestCount")}`:`${Number(e.count)}/${Number(e.capacity)} ${t("attendees").toLowerCase()}`}${e.hidden?" · "+t("hidden"):""}</p>${e.mood?`<span class="pill">${t(e.mood)}</span>`:""}${e.walkGoal?`<span class="pill"> · ${t("walk_"+e.walkGoal)}</span>`:""}${controls}<a class="action primary event-open" href="#event/${Number(e.id)}">${t("viewMeetup")}</a></article>`;
 }
 function eventBadges(e) {
   return `<div class="rows">${["quick","newcomers","cancelled"].filter(key=>e[key]).map(key=>
@@ -1159,9 +1175,12 @@ function friendsPage() {
   const outgoing=friends.filter(p=>p.status==="pending"&&p.direction==="outgoing");
   const accepted=friends.filter(p=>p.status==="accepted");
   const request=(person,received)=>`<article class="card"><h3>${memberLink(person.id,person.name)}</h3><div class="actions">${received?`${action(t("acceptFriend"),`data-friend-reply="${person.id}" data-accept="true"`,"primary")}${action(t("declineFriend"),`data-friend-reply="${person.id}" data-accept="false"`)}`:action(t("withdrawFriend"),`data-remove-friend="${person.id}" data-withdraw="true"`)}</div></article>`;
-  return `<h1>${t("friends")}</h1>${messageNavigation("friends")}<p class="muted">${t("friendsHelp")}</p>
-    ${incoming.length?`<section><h2>${t("friendRequests")} · ${incoming.length}</h2>${incoming.map(p=>request(p,true)).join("")}</section>`:""}
-    ${accepted.map(p=>`<article class="card"><h2>${memberLink(p.id,p.name)}</h2>${p.bio?`<p>${esc(p.bio.slice(0,160))}</p>`:""}${p.languages?`<p class="muted">${esc(p.languages)}</p>`:""}<div class="actions">${link("message",`#messages/${p.id}`,"primary")}${link("inviteFriend",`#friends/invite/${p.id}`)}</div><details><summary>${t("manageFriend")}</summary>${action(t("removeFriend"),`data-remove-friend="${p.id}"`,"danger")}</details></article>`).join("")||`<p>${t("friendsEmpty")}</p>`}
+  return `<h1>${t("friends")}</h1><div class="message-tabs actions" aria-label="${t("friends")}">${action(t("myFriends"),`data-friend-tab="friends" aria-pressed="${friendTab==="friends"}"`)}${action(t("friendRequests")+" · "+incoming.length,`data-friend-tab="requests" aria-pressed="${friendTab==="requests"}"`)}</div><p class="muted">${t("friendsHelp")}</p><div data-friend-section="requests" ${friendTab==="requests"?"":"hidden"}>
+    ${incoming.length?`<section class="friend-requests"><h2>${t("friendRequests")} · ${incoming.length}</h2>${incoming.map(p=>request(p,true)).join("")}</section>`:`<p>${t("noFriendRequests")}</p>`}</div>
+    <div data-friend-section="friends" ${friendTab==="friends"?"":"hidden"}><label class="search-field friend-search">${icon("search")}<span class="sr-only">${t("searchFriends")}</span><input type="search" id="friend-search" placeholder="${t("searchFriends")}" value="${esc(friendSearch)}"></label>
+    <section class="friend-list" aria-label="${t("myFriends")}">${accepted.map(p=>`<article class="friend-row" data-friend-name="${esc(p.name.toLowerCase())}" ${p.name.toLowerCase().includes(friendSearch.toLowerCase())?"":"hidden"}>${avatar(p.name)}<div class="friend-description"><h2>${memberLink(p.id,p.name)}</h2>${p.bio?`<p>${esc(p.bio.slice(0,160))}</p>`:""}${p.languages?`<small class="muted">${esc(p.languages)}</small>`:""}</div><a class="action friend-message" href="#messages/${p.id}" aria-label="${t("message")} · ${esc(p.name)}">${icon("message")}</a><details class="account-menu"><summary aria-label="${t("manageFriend")}">⋮</summary><div class="account-menu-panel">${link("inviteFriend",`#friends/invite/${p.id}`)}${action(t("removeFriend"),`data-remove-friend="${p.id}"`,"danger")}</div></details></article>`).join("")||`<p>${t("friendsEmpty")}</p>`}</section>
+    <p id="friends-no-match" class="muted" ${accepted.length&&!accepted.some(p=>p.name.toLowerCase().includes(friendSearch.toLowerCase()))?"":"hidden"}>${t("noFriendsFound")}</p>
+    <section class="friend-invite-panel"><h2>${t("inviteFriend")}</h2><p>${t("inviteHelp")}</p>${link("plans","#plans")}</section></div>
     ${link("pastParticipants","#plans")}${outgoing.length?`<details class="card"><summary>${t("friendOutgoing")} · ${outgoing.length}</summary>${outgoing.map(p=>request(p,false)).join("")}</details>`:""}`;
 }
 function inviteEvents() {return events.filter(e=>!e.hidden&&!e.cancelled&&Date.parse(e.start)>Date.now()&&(!e.minPeople||e.proposalPhase==="active")&&(e.owner===user.id||e.joined));}
@@ -1199,7 +1218,7 @@ function updateChatBadge() {
 function chatContent(peer) {
   const threads=chatThreads();
   if (!peer) return threads.size?`<div class="chat-list">${[...threads.values()].map(thread=>`<a class="card chat-preview" href="#messages/${Number(thread.peer)}">
-    <strong>${esc(thread.name)}</strong>${thread.unread?`<span class="message-count">${thread.unread}</span>`:""}
+    ${avatar(thread.name)}<strong>${esc(thread.name)}</strong>${thread.unread?`<span class="message-count">${thread.unread}</span>`:""}
     <p class="muted">${esc(thread.items[0].body)}</p><small>${esc(dateLabel(thread.items[0].created))}</small>
     </a>`).join("")}</div>`:`<p>${t("noMessages")}</p>`;
   const thread=threads.get(peer);
@@ -1213,7 +1232,7 @@ function chatContent(peer) {
     if (previous?.sender===message.sender) previous.items.push(message);
     else groups.push({sender:message.sender,items:[message]});
   }
-  return `<div class="chat-heading"><a class="action chat-back" href="#messages" aria-label="${t("conversations")}">←</a><h2>${memberLink(peer,thread.name)}</h2><details class="account-menu chat-options"><summary aria-label="${t("conversationOptions")}" title="${t("conversationOptions")}">⋮</summary><div class="account-menu-panel">${action(t("deleteConversation"),`data-delete-chat="${peer}" data-through="${Number(thread.items[0].id)}"`,"danger")}${safetyActions(peer,"person",peer)}</div></details></div><div class="chat-timeline" role="log" aria-label="${t("messages")}">${groups.map(({sender,items})=>`
+  return `<div class="chat-heading"><a class="action chat-back" href="#messages" aria-label="${t("conversations")}">←</a>${avatar(thread.name)}<h2>${memberLink(peer,thread.name)}</h2><details class="account-menu chat-options"><summary aria-label="${t("conversationOptions")}" title="${t("conversationOptions")}">⋮</summary><div class="account-menu-panel">${action(t("deleteConversation"),`data-delete-chat="${peer}" data-through="${Number(thread.items[0].id)}"`,"danger")}${safetyActions(peer,"person",peer)}</div></details></div><div class="chat-timeline" role="log" aria-label="${t("messages")}">${groups.map(({sender,items})=>`
     <section class="chat-group ${sender===user.id?"chat-own":""}">
       ${items.map(m=>`<div class="chat-entry">${m.admin_message?`<span class="pill">${t("adminSender")}</span>`:""}<p>${esc(m.body)}</p>${m.invite_event?m.invite_available?link("details",`#event/${Number(m.invite_event)}`):`<p class="muted">${t("inviteUnavailable")}</p>`:""}<div class="chat-meta"><small class="muted">${esc(dateLabel(m.created))}</small><details class="message-options"><summary aria-label="${t("messageOptions")}" title="${t("messageOptions")}">⋮</summary><div class="message-options-panel">${sender===peer?link("reportMessage",`#report/message/${Number(m.id)}`):""}${action(t("deleteMessage"),`data-delete-message="${Number(m.id)}" data-peer="${peer}"`)}</div></details></div></div>`).join("")}</section>`).join("")}</div>`;
 }
@@ -1298,9 +1317,17 @@ function noticesPage() {
       <p>${esc(n.name)} ${t(n.kind==="message"?"messageNotice":n.kind)} · ${esc(dateLabel(n.created))}</p></article>`).join(""):`<p>${t("noNotices")}</p>`);
 }
 document.addEventListener("input",event=>{
+  if(event.target.id==="friend-search") {
+    friendSearch=event.target.value;
+    const term=friendSearch.toLowerCase();let matches=0;
+    document.querySelectorAll("[data-friend-name]").forEach(row=>{row.hidden=!row.dataset.friendName.includes(term);if(!row.hidden)matches++;});
+    $("friends-no-match").hidden=matches>0||!friends.some(p=>p.status==="accepted");
+  }
+
   if (event.target.form?.id==="filter") {
     filters=Object.fromEntries(new FormData(event.target.form));
     eventPageIndex=0;
+    syncCategoryChips();
     refreshResults();
   }
   if (event.target.name==="area" && $("customArea") && event.target.form?.id!=="filter") {
@@ -1487,6 +1514,22 @@ document.addEventListener("click",async event=>{
   const button=event.target.closest("button[type=button]");
   if (!button) return;
   const d=button.dataset;
+  if (d.friendTab) {
+    friendTab=d.friendTab;
+    document.querySelectorAll("[data-friend-section]").forEach(section=>section.hidden=section.dataset.friendSection!==friendTab);
+    document.querySelectorAll("[data-friend-tab]").forEach(tab=>tab.setAttribute("aria-pressed",String(tab.dataset.friendTab===friendTab)));
+    return;
+  }
+  if ("toggleFilters" in d) {
+    const panel=$("advanced-filters");panel.open=!panel.open;
+    button.setAttribute("aria-expanded",String(panel.open));
+    if(panel.open)panel.querySelector("select").focus();
+    return;
+  }
+  if ("category" in d) {
+    filters.category=d.category;$("filter").elements.category.value=d.category;
+    eventPageIndex=0;syncCategoryChips();refreshResults();return;
+  }
   if (d.accountSection) {
     button.closest(".account-menu").open=false;
     const section=$(d.accountSection);
@@ -1518,7 +1561,8 @@ document.addEventListener("click",async event=>{
     filterForm.elements.period.value=filters.period;
     if (filterForm.elements.eventSource) filterForm.elements.eventSource.value="";
     filterForm.elements.newcomers.checked=false;
-    filterForm.closest("details").open=false;
+    $("advanced-filters").open=false;
+    syncCategoryChips();
     eventPageIndex=0;
     refreshResults();
     focusEventList();

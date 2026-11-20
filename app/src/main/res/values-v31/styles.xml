@@ -1,0 +1,11 @@
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FBF8F2</item>
+        <item name="android:colorAccent">#164E2D</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowSplashScreenBackground">#FBF8F2</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/logo_mark</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#FBF8F2</item>
+    </style>
+</resources>

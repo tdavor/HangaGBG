@@ -212,3 +212,37 @@ test('chat keeps message actions collapsed, puts friend shortcut beside inbox an
   assert.match(header,/messages-shortcut[\s\S]*friends-shortcut[\s\S]*settings-menu/);
   assert.match(header,/href="#notices"/);
 });
+
+test('redesign keeps essential routes, visible search, safe friend rows and logo-backed splash resources',()=>{
+  const run=ui();
+  for(const language of ['sv','en']) {
+    run(`lang='${language}'`);
+    const home=run('discoverPage()');
+    assert.match(home,/id="filter"/);
+    assert.match(home,/name="query" type="search"/);
+    assert.match(home,/data-toggle-filters[^>]*><svg/);
+    assert.doesNotMatch(home,/&lt;svg/);
+    assert.match(home,/data-category="walk"/);
+    assert.match(home,/buymeacoffee.com\/wjkrddbhyx/);
+    assert.match(home,/id="advanced-filters"/);
+    const nav=run('bottomNavigation("plans")');
+    assert.match(nav,/#plans" aria-current="page"/);
+    for(const route of ['discover','plans','create','profile']) assert.match(nav,new RegExp('href="#'+route+'"'));
+    const header=run('headerNavigation("friends")');
+    assert.match(header,/href="#friends"[^>]*aria-current="page"/);
+    assert.doesNotMatch(header,/href="#admin"/);
+    assert.match(run('user.admin=true;headerNavigation("admin")'),/href="#admin"/);
+    run('user.admin=false');
+  }
+  run(`friendSearch='anna';friends=[{id:2,name:'Anna <One>',status:'accepted',bio:'<script>bad</script>'},{id:3,name:'Erik',status:'accepted'}]`);
+  const list=run('friendsPage()');
+  assert.match(list,/Anna &lt;One&gt;/);assert.doesNotMatch(list,/<script>/);
+  assert.match(list,/data-friend-name="erik" hidden/);
+  assert.match(list,/#messages\/2/);assert.match(list,/#friends\/invite\/2/);
+  run('session()');assert.equal(run('friendSearch'),'');
+  const main=readFileSync(new URL('../../app/src/main/java/se/hangagbg/android/MainActivity.java',import.meta.url),'utf8');
+  const android12=readFileSync(new URL('../../app/src/main/res/values-v31/styles.xml',import.meta.url),'utf8');
+  assert.match(main,/setImageResource\(R.drawable.logo_mark\)/);
+  assert.match(android12,/@drawable\/logo_mark/);
+  assert.match(main,/onPageFinished[\s\S]*hideSplash\(\)/);
+});

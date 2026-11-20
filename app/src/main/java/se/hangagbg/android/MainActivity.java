@@ -13,6 +13,11 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.view.WindowInsets;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.ImageView;
+import android.widget.TextView;
+import android.view.Gravity;
+import android.view.View;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
@@ -28,6 +33,7 @@ import java.util.Collections;
 public final class MainActivity extends Activity {
     private static final String HOST = "appassets.androidplatform.net";
     private WebView web;
+    private LinearLayout splash;
     private boolean webReady;
     private AppUpdate appUpdate;
     private static final int NOTIFICATION_PERMISSION = 12;
@@ -36,9 +42,9 @@ public final class MainActivity extends Activity {
         super.onCreate(state);
         if (!getPackageName().endsWith(".demo")) appUpdate = new AppUpdate(this);
         web = new WebView(this);
-        web.setBackgroundColor(0xff102a25);
+        web.setBackgroundColor(0xfffbf8f2);
         FrameLayout content = new FrameLayout(this);
-        content.setBackgroundColor(0xff102a25);
+        content.setBackgroundColor(0xfffbf8f2);
         content.addView(web, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         if (android.os.Build.VERSION.SDK_INT >= 30) {
@@ -51,6 +57,10 @@ public final class MainActivity extends Activity {
                 return WindowInsets.CONSUMED;
             });
         }
+        getWindow().setStatusBarColor(0xfffbf8f2);
+        getWindow().setNavigationBarColor(0xfffbf8f2);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        showSplash(content);
         setContentView(content);
         content.requestApplyInsets();
         var settings = web.getSettings();
@@ -64,6 +74,8 @@ public final class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 webReady = true;
+                // Wait for the local page's first frame, never for a backend response.
+                web.postDelayed(() -> hideSplash(), 120);
                 openNotification(getIntent());
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -109,6 +121,40 @@ public final class MainActivity extends Activity {
                 web.loadUrl(entry);
             }
         }
+    }
+
+    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+
+    private void showSplash(FrameLayout content) {
+        splash = new LinearLayout(this);
+        splash.setOrientation(LinearLayout.VERTICAL);
+        splash.setGravity(Gravity.CENTER);
+        splash.setBackgroundColor(0xfffbf8f2);
+        splash.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        ImageView mark = new ImageView(this);
+        mark.setImageResource(R.drawable.logo_mark);
+        mark.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        mark.setContentDescription("HängaGBG");
+        splash.addView(mark, new LinearLayout.LayoutParams(dp(160),dp(160)));
+        TextView title = new TextView(this);
+        title.setText("HängaGBG");
+        title.setTextSize(28);
+        title.setTextColor(0xff183a2a);
+        title.setTypeface(null,android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,LinearLayout.LayoutParams.WRAP_CONTENT);
+        titleParams.topMargin=dp(24);
+        splash.addView(title,titleParams);
+        content.addView(splash,new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,FrameLayout.LayoutParams.MATCH_PARENT));
+        // A failed WebView must not leave an indefinite branded loading screen.
+        web.postDelayed(() -> hideSplash(), 8000);
+    }
+
+    private void hideSplash() {
+        if(splash == null) return;
+        if(splash.getParent() instanceof FrameLayout) ((FrameLayout)splash.getParent()).removeView(splash);
+        splash=null;
     }
 
     private void openExternalLink(Uri uri) {

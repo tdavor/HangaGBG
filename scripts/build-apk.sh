@@ -47,7 +47,7 @@ PYTHON
   apk_name=Hanga-Gbg-Demo.apk
 "$tools/aapt2" compile --dir app/src/main/res -o "$out/resources.zip"
 "$tools/aapt2" link -I "$platform" --manifest "$manifest" \
-  --rename-manifest-package "$package_id" --version-code 27 --version-name 1.6.2 \
+  --rename-manifest-package "$package_id" --version-code 28 --version-name 1.7.0 \
   --min-sdk-version 26 --target-sdk-version 35 -A "$assets" --java "$out/generated" --custom-package se.hangagbg.android \
   -o "$out/package.apk" "$out/resources.zip"
 java -m jdk.compiler/com.sun.tools.javac.Main -source 17 -target 17 -classpath "$platform" \
