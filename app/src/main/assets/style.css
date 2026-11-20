@@ -125,4 +125,6 @@ button:hover,a.action:hover{background:#edf2e6}.primary,a.action.primary{backgro
   .conversation-page #chat-compose{flex:none}
 }
 
-.category-chips{flex-wrap:wrap;overflow:visible}.create-meetup{display:inline-flex;gap:.45rem;margin:.5rem 0 .75rem}.account-menu-panel>a{gap:.45rem}
+.category-chips{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}.create-meetup{display:inline-flex;gap:.45rem;margin:.5rem 0 .75rem}.account-menu-panel>a{gap:.45rem}
+
+.search-heading{margin:1rem 0 .35rem;font-size:1rem}.source-hint{font-size:.75rem;margin:0 0 .7rem}

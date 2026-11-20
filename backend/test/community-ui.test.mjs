@@ -228,6 +228,7 @@ test('redesign keeps essential routes, visible search, safe friend rows and logo
     for(const category of run("cats")) assert.match(home,new RegExp('data-category="'+category+'"'));
     assert.match(run('headerNavigation("discover")'),/buymeacoffee.com\/wjkrddbhyx/);
     assert.match(home,/id="advanced-filters"/);
+    assert.ok(home.indexOf(run('t("userCreatedMeetups")'))<home.indexOf('id="filter"'));
     const nav=run('bottomNavigation("plans")');
     assert.match(nav,/#plans" aria-current="page"/);
     for(const route of ['discover','plans','create','profile']) assert.match(nav,new RegExp('href="#'+route+'"'));

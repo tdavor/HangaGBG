@@ -1,6 +1,7 @@
 "use strict";
 
 const copy = {
+  userCreatedMeetups:["Träffar skapade av användare","Meetups created by users"], mixedSourcesHint:["Även Göteborgs stadskalender visas. Välj källa i filtren.","Göteborg’s city calendar is also included. Choose a source in the filters."],
   noFriendRequests:["Inga nya vänförfrågningar.","No new friend requests."],
   homeTitle:["Hitta ditt sällskap","Find your company"], homeIntro:["Små möten. Nya vänner. Nära dig.","Small meetups. New friends. Close to you."], explore:["Upptäck","Discover"], createShort:["Skapa","Create"], profileShort:["Profil","Profile"], mainNavigation:["Huvudnavigation","Main navigation"], supportCoffee:["Bjud på en kaffe","Buy me a coffee"], nearbyMeetups:["Träffar nära dig","Meetups near you"], searchFriends:["Sök bland vänner","Search friends"], myFriends:["Mina vänner","My friends"], noFriendsFound:["Inga vänner matchar din sökning.","No friends match your search."], viewMeetup:["Visa träffen","View meetup"], filterShort:["Filter","Filters"], searchMeetups:["Vad vill du hitta på?","What would you like to do?"],
 
@@ -820,6 +821,7 @@ function feedbackPage(id) {
 function discoverPage() {
   return `<section class="home-intro"><h1>${t("homeTitle")}</h1><p>${t("homeIntro")}</p><a class="action primary create-meetup" href="#create">${icon("plus")}${t("create")}</a></section>
     ${demo?`<p class="muted">${t("demoBanner")}</p>`:!base?`<p>${t("setup")}</p>${link("connect","#connect")}`:""}
+    <h2 class="search-heading">${t("userCreatedMeetups")}</h2>${!demo?`<p class="source-hint muted">${t("mixedSourcesHint")}</p>`:""}
     <form id="filter" class="discovery-search" role="search"><div class="search-row"><label class="search-field">${icon("search")}<span class="sr-only">${t("keyword")}</span><input name="query" type="search" value="${esc(filters.query)}" placeholder="${t("searchMeetups")}"></label><button type="button" data-toggle-filters aria-label="${t("searchFilters")}" aria-expanded="${hasFilters()}">${icon("gear")}</button></div>
     <div class="category-chips" aria-label="${t("category")}">${[["","all"],...cats.map(key=>[key,key])].map(([key,label])=>action(t(label),`data-category="${key}" aria-pressed="${filters.category===key}"`)).join("")}</div>
     <details id="advanced-filters" class="discover-filters" ${hasFilters()?"open":""}><summary>${t("searchFilters")}</summary><div class="grid">
