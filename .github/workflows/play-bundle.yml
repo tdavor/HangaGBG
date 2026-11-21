@@ -1,0 +1,54 @@
+name: Build signed Google Play bundle
+on:
+  push:
+    branches:
+      - main
+      - codex/play-app-bundle
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test backend and UI
+        run: node --test backend/test/*.mjs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - uses: android-actions/setup-android@v4
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+      - name: Build and verify signed Play bundle
+        env:
+          FIREBASE_CLIENT_CONFIG: ${{ secrets.HANGA_GOOGLE_SERVICES_JSON }}
+          KEYSTORE_BASE64: ${{ secrets.HANGA_KEYSTORE_BASE64 }}
+          HANGA_STOREPASS: ${{ secrets.HANGA_STOREPASS }}
+          HANGA_KEYPASS: ${{ secrets.HANGA_KEYPASS }}
+          HANGA_KEY_ALIAS: ${{ secrets.HANGA_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          : "${KEYSTORE_BASE64:?Missing HANGA_KEYSTORE_BASE64}"
+          : "${FIREBASE_CLIENT_CONFIG:?Missing HANGA_GOOGLE_SERVICES_JSON}"
+          export HANGA_KEYSTORE="$RUNNER_TEMP/hangagbg-upload.keystore"
+          trap 'rm -f "$HANGA_KEYSTORE" app/google-services.json' EXIT
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$HANGA_KEYSTORE"
+          printf '%s' "$FIREBASE_CLIENT_CONFIG" > app/google-services.json
+          bash scripts/build-play-bundle.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HangaGBG-Google-Play
+          path: |
+            app/build/outputs/play/HangaGBG-Play.aab
+            app/build/outputs/play/HangaGBG-Play-info.json
+          if-no-files-found: error
+          retention-days: 30

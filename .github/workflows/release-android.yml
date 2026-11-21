@@ -24,10 +24,10 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.10.2'
+          gradle-version: '8.11.1'
       - uses: android-actions/setup-android@v4
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
       - name: Build signed HangaGBG APK
         env:
           FIREBASE_CLIENT_CONFIG: ${{ secrets.HANGA_GOOGLE_SERVICES_JSON }}
@@ -48,6 +48,7 @@ jobs:
           : "${FIREBASE_CLIENT_CONFIG:?Missing HANGA_GOOGLE_SERVICES_JSON}"
           printf '%s' "$FIREBASE_CLIENT_CONFIG" > app/google-services.json
           bash scripts/build-apk.sh firebase
+          bash scripts/build-play-bundle.sh
           apk=app/build/manual/firebase/HangaGBG.apk
           version=$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$apk" |
             sed -n "1s/.*versionName='\([^']*\)'.*/\1/p")
@@ -61,7 +62,7 @@ jobs:
           # Create only: GitHub rejects an existing tag instead of moving it.
           gh api "repos/$GITHUB_REPOSITORY/git/refs" --method POST \
             -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$GITHUB_SHA"
-      - name: Attach APK to GitHub release
+      - name: Attach APK and Play bundle to GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -70,5 +71,5 @@ jobs:
           legacy="$RUNNER_TEMP/Hanga-Gbg-Firebase.apk"
           # Version 1.3.2 checks this exact asset name before it knows the new name.
           cp "$apk" "$legacy"
-          gh release create "$RELEASE_TAG" "$apk" "$legacy#HangaGBG – compatibility for v1.3.2" \
+          gh release create "$RELEASE_TAG" "$apk" "$legacy#HangaGBG – compatibility for v1.3.2" app/build/outputs/play/HangaGBG-Play.aab app/build/outputs/play/HangaGBG-Play-info.json \
             --verify-tag --generate-notes --latest
