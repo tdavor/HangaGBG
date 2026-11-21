@@ -41,13 +41,13 @@ html = html.replace('<script src="app.js" defer></script>', "")
 html = html.replace("</body>", "<script>" + js + "</script></body>")
 Path(sys.argv[1]).write_text(html)
 PYTHON
-  sed '/android.permission.INTERNET/d; /android.permission.REQUEST_INSTALL_PACKAGES/d; /android.permission.BIND_JOB_SERVICE/d; s/android:label="Hänga Gbg"/android:label="Hänga Gbg Demo"/' \
+  sed '/android.permission.INTERNET/d; /android.permission.REQUEST_INSTALL_PACKAGES/d; /android.permission.BIND_JOB_SERVICE/d; s/android:label="Hänga Gbg"/android:label="Hänga Gbg Demo"/; s/[$]{applicationId}/se.hangagbg.android.demo/g' \
     app/src/main/AndroidManifest.xml > "$manifest"
   package_id=se.hangagbg.android.demo
   apk_name=Hanga-Gbg-Demo.apk
 "$tools/aapt2" compile --dir app/src/main/res -o "$out/resources.zip"
 "$tools/aapt2" link -I "$platform" --manifest "$manifest" \
-  --rename-manifest-package "$package_id" --version-code 30 --version-name 1.8.0 \
+  --rename-manifest-package "$package_id" --version-code 31 --version-name 1.8.1 \
   --min-sdk-version 26 --target-sdk-version 35 -A "$assets" --java "$out/generated" --custom-package se.hangagbg.android \
   -o "$out/package.apk" "$out/resources.zip"
 java -m jdk.compiler/com.sun.tools.javac.Main -source 17 -target 17 -classpath "$platform" \

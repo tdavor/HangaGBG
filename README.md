@@ -1,9 +1,13 @@
-# Hänga Gbg 1.8.0 · Android
+# Hänga Gbg 1.8.1 · Android
 
-Version 1.8.0 adds editable profile photos and public member profiles with a name, photo, languages, chat shortcut, organized meetups and joined meetups. Email stays out of the member API and public screen. Photos are resized/cropped on the device and stored as bounded JPEGs in a separate Firestore collection through the existing Worker; Firebase Storage and new Android permissions are not needed. Backend deployment is required before using the new APK.
+Version 1.8.1 adds a full available-members list, profile-photo thumbnails, private meetup suggestions for available users and a separate profile-camera button. Suggestions include activity, time and place; the recipient may reply, and the sender may continue once they do. This does not create a friendship or RSVP. Existing blocks remain enforced. Profile camera capture uses a private temporary image URI and the system camera without requesting the CAMERA permission. Backend deployment is required for photo lookup and suggestions.
+
+Company today in stable shuffled groups of up to three eligible members, with a Next 3 button and a position indicator. Availability dots beside member names mean available today, not online. They expire automatically using Stockholm dates and refresh without resetting forms.
+
+Public profiles support editable profile photos and public member profiles with a name, photo, languages, chat shortcut, organized meetups and joined meetups. Email stays out of the member API and public screen. Photos are resized/cropped on the device and stored as bounded JPEGs in a separate Firestore collection through the existing Worker; Firebase Storage and new Android permissions are not needed. Backend deployment is required before using the new APK.
 
 
-Version 1.8.0 refreshes the interface with a light Scandinavian palette, four bottom tabs, visible search, category chips, compact friend rows and contextual chat controls. The existing logo is preserved. Android startup shows the same icon artwork and the app name; it clears after two seconds, without waiting for Firebase. Event covers use category illustrations when no event photo is available.
+Version 1.8.1 refreshes the interface with a light Scandinavian palette, four bottom tabs, visible search, category chips, compact friend rows and contextual chat controls. The existing logo is preserved. Android startup shows the same icon artwork and the app name; it clears after two seconds, without waiting for Firebase. Event covers use category illustrations when no event photo is available.
 
 [**Ladda ner / Download Hänga Gbg för Android (.apk)**](https://github.com/tdavor/HangaGBG/releases/latest/download/HangaGBG.apk)
 

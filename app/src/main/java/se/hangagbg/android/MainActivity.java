@@ -34,6 +34,8 @@ import java.util.Collections;
 public final class MainActivity extends Activity {
     private static final String HOST = "appassets.androidplatform.net";
     private static final int PHOTO_PICKER = 73;
+    private static final int PHOTO_CAMERA = 74;
+    private Uri cameraPhoto;
     private ValueCallback<Uri[]> photoPicker;
     private WebView web;
     private LinearLayout splash;
@@ -77,6 +79,17 @@ public final class MainActivity extends Activity {
             @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if(photoPicker!=null)photoPicker.onReceiveValue(null);
                 photoPicker=callback;
+                if(params.isCaptureEnabled()) {
+                    ProfilePhotoProvider.photoFile(MainActivity.this).delete();
+                    cameraPhoto=Uri.parse("content://"+getPackageName()+".profilephotos/profile-camera.jpg");
+                    Intent camera=new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+                    camera.putExtra(android.provider.MediaStore.EXTRA_OUTPUT,cameraPhoto);
+                    camera.setClipData(android.content.ClipData.newRawUri("Profile photo",cameraPhoto));
+                    camera.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    try {startActivityForResult(camera,PHOTO_CAMERA);}
+                    catch(android.content.ActivityNotFoundException error){photoPicker.onReceiveValue(null);photoPicker=null;cameraPhoto=null;}
+                    return true;
+                }
                 Intent choose=new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 choose.addCategory(Intent.CATEGORY_OPENABLE);
                 choose.setType("image/*");
@@ -139,8 +152,10 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request,result,data);
-        if(request!=PHOTO_PICKER||photoPicker==null)return;
-        Uri uri=result==RESULT_OK&&data!=null?data.getData():null;
+        if((request!=PHOTO_PICKER&&request!=PHOTO_CAMERA)||photoPicker==null)return;
+        Uri uri=request==PHOTO_CAMERA?(result==RESULT_OK&&prepareCameraImage()?cameraPhoto:null):result==RESULT_OK&&data!=null?data.getData():null;
+        if(request==PHOTO_CAMERA&&uri==null)ProfilePhotoProvider.photoFile(this).delete();
+        cameraPhoto=null;
         boolean image=false;
         if(uri!=null&&"content".equals(uri.getScheme())) {
             try {
@@ -150,6 +165,40 @@ public final class MainActivity extends Activity {
         }
         photoPicker.onReceiveValue(image?new Uri[]{uri}:null);
         photoPicker=null;
+    }
+
+    private boolean prepareCameraImage() {
+        java.io.File file=ProfilePhotoProvider.photoFile(this);
+        if(file.length()==0||file.length()>32L*1024*1024)return false;
+        android.graphics.Bitmap image=null,rotated=null;
+        try {
+            android.graphics.BitmapFactory.Options options=new android.graphics.BitmapFactory.Options();
+            options.inJustDecodeBounds=true;
+            android.graphics.BitmapFactory.decodeFile(file.getPath(),options);
+            if(options.outWidth<=0||options.outHeight<=0)return false;
+            options.inSampleSize=1;
+            while(Math.max(options.outWidth,options.outHeight)/options.inSampleSize>1024)options.inSampleSize*=2;
+            options.inJustDecodeBounds=false;
+            image=android.graphics.BitmapFactory.decodeFile(file.getPath(),options);
+            if(image==null)return false;
+            int orientation=new android.media.ExifInterface(file.getPath()).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION,1);
+            android.graphics.Matrix matrix=new android.graphics.Matrix();
+            switch(orientation){
+                case 2:matrix.setScale(-1,1);break;
+                case 3:matrix.setRotate(180);break;
+                case 4:matrix.setScale(1,-1);break;
+                case 5:matrix.setRotate(90);matrix.postScale(-1,1);break;
+                case 6:matrix.setRotate(90);break;
+                case 7:matrix.setRotate(-90);matrix.postScale(-1,1);break;
+                case 8:matrix.setRotate(270);break;
+                default:break;
+            }
+            rotated=android.graphics.Bitmap.createBitmap(image,0,0,image.getWidth(),image.getHeight(),matrix,true);
+            try(java.io.FileOutputStream output=new java.io.FileOutputStream(file)){
+                return rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG,85,output);
+            }
+        } catch(java.io.IOException|RuntimeException error){return false;}
+        finally {if(rotated!=null&&rotated!=image)rotated.recycle();if(image!=null)image.recycle();}
     }
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
@@ -256,6 +305,10 @@ public final class MainActivity extends Activity {
     }
 
     private final class AppActions {
+        @JavascriptInterface public void clearCameraPhoto() {
+            runOnUiThread(() -> ProfilePhotoProvider.photoFile(MainActivity.this).delete());
+        }
+
         @JavascriptInterface public void syncReminders(String entries, String scope, String language) {
             runOnUiThread(() -> ReminderReceiver.sync(MainActivity.this,entries,scope,"en".equals(language)));
         }

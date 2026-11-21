@@ -37,7 +37,7 @@ async function allowedMember(db,me,id) {
   if(!person||person.deleted||person.blocked||await db.get("blocks",key(me.id,id))||await db.get("blocks",key(id,me.id))) fail("missing");
   return person;
 }
-export async function communityAction(db,name,p,me,{text,integer,nextIds,notices}) {
+export async function communityAction(db,name,p,me,{text,integer,nextIds,notices,writeMessage}) {
   const uid=me.id;
   if(name==="availability_list") {
     const rows=await db.query("availability",[["until","GREATER_THAN",new Date().toISOString()]]);
@@ -47,6 +47,20 @@ export async function communityAction(db,name,p,me,{text,integer,nextIds,notices
       const person=people.get(String(row.user_id));
       return person&&!person.deleted&&!person.blocked&&!blocks.some(b=>(b.blocker===uid&&b.blocked===row.user_id)||(b.blocker===row.user_id&&b.blocked===uid));
     }).map(row=>({...row,name:people.get(String(row.user_id)).name})).sort((a,b)=>a.from.localeCompare(b.from));
+  }
+  if(name==="availability_offer") {
+    const peer=integer(p.peer),person=await allowedMember(db,me,peer);
+    if(peer===uid)fail("invalid");
+    const available=await db.get("availability",peer),start=Date.parse(p.start);
+    if(!available||Date.parse(available.until)<=Date.now()||local(Date.parse(available.from)).slice(0,10)!==local(Date.now()).slice(0,10))fail("missing");
+    if(!Number.isFinite(start)||start<=Date.now()||start<Date.parse(available.from)||start>=Date.parse(available.until)||!["fika","walk","food","other"].includes(p.activity))fail("invalid");
+    const place=text(p.place,180,1),note=text(p.note,700);
+    const prior=await db.query("messages",[["sender","EQUAL",uid],["recipient","EQUAL",peer]]);
+    if(prior.some(m=>m.availability_offer===true&&m.offer_from===available.from&&m.offer_until===available.until))fail("offerPending");
+    const labels=p.lang==="en"?{fika:"Coffee",walk:"A walk",food:"A meal",other:"Meetup"}:{fika:"Fika",walk:"En promenad",food:"Mat",other:"Träff"};
+    const body=(p.lang==="en"?"Meetup suggestion":"Förslag på träff")+": "+labels[p.activity]+"\n"+
+      new Date(start).toLocaleString(p.lang==="en"?"en-GB":"sv-SE",{timeZone:"Europe/Stockholm"})+"\n"+place+(note?"\n"+note:"");
+    return writeMessage(db,me,peer,0,"Hänga Gbg",body,{availability_offer:true,offer_from:available.from,offer_until:available.until});
   }
   if(name==="availability_save") {
     if(p.enabled===false){db.remove("availability",uid);return {};}

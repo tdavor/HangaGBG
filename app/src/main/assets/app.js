@@ -1,6 +1,10 @@
 "use strict";
 
 const copy = {
+  company:["Tillgängliga idag","Available today"], offer:["Föreslå en träff","Suggest a meetup"],
+  suggestMeetup:["Föreslå en träff","Suggest a meetup"], allAvailable:["Alla tillgängliga idag","Everyone available today"], offerHelp:["Skicka ett privat förslag inom personens angivna tid. Mottagaren kan svara i chatten. Ingen vänskap eller anmälan skapas automatiskt.","Send a private suggestion within the person's available time. They can reply in chat. No friendship or event registration is created automatically."], offerPending:["Du har redan skickat ett förslag för den här tillgängligheten.","You have already sent a suggestion for this availability."], offerPendingHelp:["Ditt förslag är skickat. Du kan fortsätta skriva när mottagaren har svarat.","Your suggestion has been sent. You can continue messaging once the recipient replies."], availabilityChatHelp:["Ni kan svara privat på förslaget här.","You can discuss the suggestion privately here."], availabilityEnded:["Tillgängligheten har upphört eller tiden räcker inte längre för ett nytt förslag.","This availability has ended or there is no longer enough time for a new suggestion."], takePhoto:["Ta en bild","Take a photo"],
+
+  nextCompany:["Nästa 3","Next 3"], availableTodayBadge:["Tillgänglig idag","Available today"], companyBatch:["Visar","Showing"],
   profilePhoto:["Profilbild","Profile photo"], changePhoto:["Välj profilbild","Choose profile photo"], removePhoto:["Ta bort bild","Remove photo"], photoHelp:["Välj en bild från telefonen. Den beskärs till en kvadrat och visas på din offentliga profil.","Choose a photo from your phone. It is cropped to a square and shown on your public profile."], photoSaved:["Profilbilden har sparats.","Profile photo saved."], photoInvalid:["Välj en JPG-, PNG- eller WebP-bild på högst 10 MB.","Choose a JPG, PNG or WebP image up to 10 MB."], photoSaving:["Sparar bilden…","Saving photo…"], organizedMeetups:["Organiserade träffar","Meetups organized"], participatingMeetups:["Deltar i","Meetups attending"], noPublicMeetups:["Inga offentliga träffar att visa.","No public meetups to show."], contactRule:["Du kan skriva när ni är vänner eller deltar i samma träff. Tidigare konversationer kan fortfarande läsas.","You can send messages when you are friends or attend the same meetup. Previous conversations remain readable."], privateEmail:["Din e-post visas aldrig på den offentliga profilen.","Your email is never shown on your public profile."],
 
   userCreatedMeetups:["Träffar skapade av användare","Meetups created by users"], mixedSourcesHint:["Även Göteborgs stadskalender visas. Välj källa i filtren.","Göteborg’s city calendar is also included. Choose a source in the filters."],
@@ -231,6 +235,9 @@ let token = demo ? localStorage.hangaDemoToken || "" : hangaCloud.signedIn ? "fi
 let pendingEmail = "";
 let blockedPeople=[];
 let memberProfile = null;
+let companyPhotoCache=new Map(),companyPhotoLoads=new Map();
+let companyOrder=[],companyOffset=0,companyDay="",companyOwner=0;
+let availabilityRevision=0,availabilityRequest,availabilityTimer;
 let availability=[],followingPeople=[],groupRows=[],groupEventId=0,feedbackData={},againRows=[],againEventId=0;
 let friends=[],friendContext=null,chatPeer=null;
 let friendSearch="",friendTab="friends";
@@ -413,6 +420,8 @@ function syncAlertProfile() {
 }
 window.hangaSyncAlerts=syncAlertProfile;
 function session(result) {
+  companyPhotoCache.clear();companyPhotoLoads.clear();
+  availabilityRevision++;clearTimeout(availabilityTimer);companyOrder=[];companyOffset=0;companyDay="";companyOwner=0;
   messageList=[];
   availability=[];followingPeople=[];groupRows=[];groupEventId=0;feedbackData={};againRows=[];againEventId=0;friends=[];friendContext=null;chatPeer=null;friendSearch="";friendTab="friends";
   token=result?.token || "";
@@ -556,11 +565,10 @@ async function load() {
         if (error.message==="blocked") status("blocked");
       } else throw error; }
     }
-    if (!demo && user && ["discover","availability"].includes(page)) {
-      const entries=await api("/availability");
-      if(version!==refreshId) return;
-      availability=entries;
-      if(page==="discover" && $("today-company")) $("today-company").innerHTML=todayCompany();
+    if (!demo && user) {
+      const owner=user.id;
+      await refreshAvailability();
+      if(version!==refreshId||user?.id!==owner)return;
     }
     if (!demo && user && page==="profile") followingPeople=await api("/follows");
     if(!demo&&user&&page==="friends") {
@@ -630,7 +638,7 @@ function hasArea(event,area) {
   return event.area===area;
 }
 function icon(name) {
-  const paths={search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/>',plus:'<path d="M12 4v16M4 12h16"/>',person:'<circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/>',friends:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 5v2"/>',message:'<path d="M21 15a3 3 0 0 1-3 3H8l-5 4V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z"/>',gear:'<path d="m9 3 1-2h4l1 2 3 2 2 .5 2 3-1 2v3l1 2-2 3-2 .5-3 2-1 2h-4l-1-2-3-2-2-.5-2-3 1-2v-3l-1-2 2-3L6 5z"/><circle cx="12" cy="12" r="3"/>',walk:'<circle cx="14" cy="4" r="2"/><path d="m7 21 4-8 4 3 1 5M4 11l5-3 4 1 3 4h4M11 8l-1 6"/>',fika:'<path d="M4 8h12v7a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 9h2a3 3 0 0 1 0 6h-2M7 2v3m5-3v3M2 23h17"/>',culture:'<path d="m2 8 10-6 10 6zM5 10v9m7-9v9m7-9v9M2 22h20"/>',other:'<path d="m12 2 3 6 7 1-5 5 1 8-6-4-6 4 1-8-5-5 7-1z"/>'};
+  const paths={camera:'<path d="M3 7h4l2-3h6l2 3h4v14H3z"/><circle cx="12" cy="13" r="4"/>',search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/>',plus:'<path d="M12 4v16M4 12h16"/>',person:'<circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/>',friends:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 5v2"/>',message:'<path d="M21 15a3 3 0 0 1-3 3H8l-5 4V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z"/>',gear:'<path d="m9 3 1-2h4l1 2 3 2 2 .5 2 3-1 2v3l1 2-2 3-2 .5-3 2-1 2h-4l-1-2-3-2-2-.5-2-3 1-2v-3l-1-2 2-3L6 5z"/><circle cx="12" cy="12" r="3"/>',walk:'<circle cx="14" cy="4" r="2"/><path d="m7 21 4-8 4 3 1 5M4 11l5-3 4 1 3 4h4M11 8l-1 6"/>',fika:'<path d="M4 8h12v7a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 9h2a3 3 0 0 1 0 6h-2M7 2v3m5-3v3M2 23h17"/>',culture:'<path d="m2 8 10-6 10 6zM5 10v9m7-9v9m7-9v9M2 22h20"/>',other:'<path d="m12 2 3 6 7 1-5 5 1 8-6-4-6 4 1-8-5-5 7-1z"/>'};
   return `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.other}</svg>`;
 }
 function avatar(name,photo="") {
@@ -664,6 +672,8 @@ function render() {
     ${link("login",Number(id)>0?`#auth/login/chat/${Number(id)}`:"#auth","primary")}`;
   else if (!user) html=`<h1>${t(page)}</h1><p>${t("loginRequired")}</p>${link("login","#auth","primary")}`;
   else if (page==="availability") html=availabilityPage();
+  else if(page==="company")html=companyPage();
+  else if(page==="offer")html=offerPage(Number(id));
   else if (page==="group") html=groupPage(Number(id));
   else if (page==="feedback") html=feedbackPage(Number(id));
   else if (page==="again") html=againPage(Number(id));
@@ -684,6 +694,7 @@ function render() {
   else html=discoverPage();
   if(page==="create"&&!id&&user) html=`<div class="actions">${link("quick","#create/quick")}</div>`+html;
   $("main").innerHTML=html;
+  if(["discover","company","availability"].includes(page))void refreshCompanyPhotos();
   if (page==="messages") scrollChatToLatest();
   if (page==="group" && $("group-content")) $("group-content").scrollTop=$("group-content").scrollHeight;
 }
@@ -728,21 +739,102 @@ function authPage(mode) {
     <div class="actions">${register?"":action(t("forgotPassword"),"data-forgot-password")} ${link(register?"login":"register",register?"#auth":"#auth/register")}
     </div>`;
 }
+function availableToday(entry) {
+  return Number.isFinite(Date.parse(entry.from))&&Date.parse(entry.until)>Date.now()&&
+    localDate(new Date(entry.from)).slice(0,10)===localDate(new Date()).slice(0,10);
+}
 function ownAvailability() {
-  return availability.find(entry=>Number(entry.user_id)===Number(user?.id)&&Date.parse(entry.until)>Date.now());
+  return availability.find(entry=>Number(entry.user_id)===Number(user?.id)&&availableToday(entry));
+}
+function availabilityIndicator(id) {
+  const active=availability.some(entry=>Number(entry.user_id)===Number(id)&&availableToday(entry));
+  return `<span class="availability-dot" data-availability-id="${Number(id)}" role="img" aria-label="${t("availableTodayBadge")}" title="${t("availableTodayBadge")}" ${active?"":"hidden"}></span>`;
+}
+function updateAvailabilityViews() {
+  if(route()[0]==="discover"&&$("today-company"))$("today-company").innerHTML=todayCompany();
+  if(route()[0]==="availability"&&$("availability-people"))$("availability-people").innerHTML=todayCompany(true);
+  if(route()[0]==="company"&&$("company-list"))$("company-list").innerHTML=todayCompany(true);
+  if(["discover","company","availability"].includes(route()[0]))void refreshCompanyPhotos();
+  document.querySelectorAll("[data-availability-id]").forEach(dot=>{
+    dot.hidden=!availability.some(entry=>Number(entry.user_id)===Number(dot.dataset.availabilityId)&&availableToday(entry));
+  });
+}
+function scheduleAvailabilityExpiry() {
+  clearTimeout(availabilityTimer);
+  const ends=availability.filter(availableToday).map(entry=>Date.parse(entry.until));
+  if(ends.length)availabilityTimer=setTimeout(()=>{updateAvailabilityViews();scheduleAvailabilityExpiry();},Math.min(2147483647,Math.max(1,Math.min(...ends)-Date.now()+1)));
+}
+function refreshAvailability() {
+  if(demo||!user)return Promise.resolve();
+  const owner=user.id,revision=availabilityRevision;
+  if(availabilityRequest?.owner===owner&&availabilityRequest.revision===revision)return availabilityRequest.promise;
+  const request={owner,revision};
+  request.promise=(async()=>{
+    const entries=await api("/availability");
+    if(user?.id!==owner||revision!==availabilityRevision)return;
+    availability=entries;updateAvailabilityViews();scheduleAvailabilityExpiry();
+  })().finally(()=>{if(availabilityRequest===request)availabilityRequest=undefined;});
+  availabilityRequest=request;return request.promise;
 }
 function availabilitySummary(entry) {
   return `${esc(t(entry.activity))} · ${esc(entry.area)}<small>${esc(localDate(new Date(entry.from)).slice(11))}–${esc(localDate(new Date(entry.until)).slice(11))}</small>`;
 }
+function companyCandidates() {
+  return [...new Map(availability.filter(entry=>Number(entry.user_id)!==Number(user?.id)&&availableToday(entry)).map(entry=>[Number(entry.user_id),entry])).values()];
+}
+function companySelection(current) {
+  const day=localDate(new Date()).slice(0,10),owner=Number(user?.id)||0;
+  if(day!==companyDay||owner!==companyOwner){companyOrder=[];companyOffset=0;companyDay=day;companyOwner=owner;}
+  const ids=new Set(current.map(entry=>Number(entry.user_id)));
+  companyOrder=companyOrder.filter(id=>ids.has(id));
+  const added=[...ids].filter(id=>!companyOrder.includes(id));
+  for(let i=added.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[added[i],added[j]]=[added[j],added[i]];}
+  companyOrder.push(...added);
+  companyOffset=Math.min(companyOffset,Math.max(0,(Math.ceil(companyOrder.length/3)-1)*3));
+  const byId=new Map(current.map(entry=>[Number(entry.user_id),entry]));
+  return companyOrder.slice(companyOffset,companyOffset+3).map(id=>byId.get(id));
+}
+function nextCompany() {
+  const current=companyCandidates();companySelection(current);
+  companyOffset=companyOffset+3>=companyOrder.length?0:companyOffset+3;
+  updateAvailabilityViews();
+  $("today-company")?.querySelector("[data-next-company]")?.focus();
+}
 function todayCompany(all=false) {
-  const own=ownAvailability();
-  const current=availability.filter(entry=>Number(entry.user_id)!==Number(user?.id)&&Date.parse(entry.until)>Date.now());
-  return `<div class="rows between"><h2>${t("todayCompany")}</h2>${!all&&!own?link("availableToday","#availability"):""}</div>
-    ${own&&!all?`<section class="my-availability"><strong>${t("myAvailability")}</strong><p>${availabilitySummary(own)}</p>
+  const own=ownAvailability(),current=companyCandidates(),selected=all?current:companySelection(current);
+  return `${all?"":`<div class="rows between"><h2>${t("todayCompany")}</h2>${!own?link("availableToday","#availability"):""}</div>`}
+    ${own&&!all?`<section class="my-availability"><strong>${t("myAvailability")}</strong><p>${memberLink(user.id,user.name)}</p><p>${availabilitySummary(own)}</p>
       <div class="actions">${link("editAvailability","#availability")}${action(t("removeAvailability"),"data-remove-availability","danger")}</div></section>`:""}
-    ${current.length?`<ul class="availability-list company-grid">${(all?current:current.slice(0,3)).map(entry=>`<li>
-      ${avatar(entry.name)}<div>${memberLink(entry.user_id,entry.name)}<p>${availabilitySummary(entry)}</p></div>
-      </li>`).join("")}</ul>${!all&&current.length>3?link("viewAvailability","#availability"):""}`:!own?`<p class="muted">${t("todayEmpty")}</p>`:""}`;
+    ${current.length?`<ul class="availability-list company-grid ${all?"company-all":""}" aria-live="polite">${selected.map(entry=>`<li>
+      <a data-company-photo="${Number(entry.user_id)}" href="#member/${Number(entry.user_id)}" aria-label="${esc(entry.name)}">${avatar(entry.name,companyPhotoCache.get(Number(entry.user_id))?.photo)}</a><div>${memberLink(entry.user_id,entry.name)}<p>${availabilitySummary(entry)}</p><a class="action company-offer" href="#offer/${Number(entry.user_id)}">${t("suggestMeetup")}</a></div>
+      </li>`).join("")}</ul>${!all&&current.length>3?`<div class="company-pagination"><small class="muted">${t("companyBatch")} ${companyOffset+1}–${companyOffset+selected.length} / ${current.length}</small>${action(t("nextCompany"),"data-next-company")}</div>`:""}${!all?link("allAvailable","#company"):""}`:!own?`<p class="muted">${t("todayEmpty")}</p>`:""}`;
+}
+async function refreshCompanyPhotos() {
+  if(demo||!user)return;
+  const owner=user.id,revision=availabilityRevision,tasks=[];
+  const ids=[...new Set([...document.querySelectorAll("[data-company-photo]")].map(node=>Number(node.dataset.companyPhoto)))];
+  for(const id of ids) {
+    if(!availability.some(entry=>Number(entry.user_id)===id&&availableToday(entry))||companyPhotoLoads.has(id)||Date.now()-(companyPhotoCache.get(id)?.checked||0)<120000)continue;
+    const task=api("/members/photo",{id}).then(result=>{
+      if(user?.id===owner&&availabilityRevision===revision)companyPhotoCache.set(id,{photo:result.photo,checked:Date.now()});
+    }).catch(()=>{
+      if(user?.id===owner&&availabilityRevision===revision)companyPhotoCache.set(id,{photo:"",checked:Date.now()});
+    }).finally(()=>{if(companyPhotoLoads.get(id)===task)companyPhotoLoads.delete(id);});
+    companyPhotoLoads.set(id,task);tasks.push(task);
+  }
+  if(tasks.length){await Promise.allSettled(tasks);if(user?.id===owner&&availabilityRevision===revision)updateAvailabilityViews();}
+}
+function companyPage() {
+  return `<h1>${t("allAvailable")}</h1><div class="actions">${link(ownAvailability()?"editAvailability":"availableToday","#availability")}</div><section id="company-list">${todayCompany(true)}</section>`;
+}
+function offerPage(peer) {
+  const person=availability.find(entry=>Number(entry.user_id)===peer&&availableToday(entry));
+  const start=person?Math.ceil(Math.max(Date.now()+60000,Date.parse(person.from))/60000)*60000:0;
+  if(!person||peer===user.id||start>=Date.parse(person.until))return `<h1>${t("suggestMeetup")}</h1><p>${t("availabilityEnded")}</p>${link("allAvailable","#company")}`;
+  return `<h1>${t("suggestMeetup")}</h1><p>${memberLink(peer,person.name)}</p><p>${availabilitySummary(person)}</p><p class="muted">${t("offerHelp")}</p>
+    <form data-form="availability-offer" data-peer="${peer}">${select("activity","activity",["fika","walk","food","other"].map(key=>[key,t(key)]),person.activity)}
+    ${field("start","start",localDate(new Date(start)),"datetime-local",`required min="${localDate(new Date(start))}" max="${localDate(new Date(Date.parse(person.until)-60000))}"`)}
+    ${field("place","place","","text",'required maxlength="180"')}${textArea("message","note","",'maxlength="700"')}<button class="primary">${t("send")}</button></form>`;
 }
 function availabilityPage() {
   const own=ownAvailability();
@@ -755,21 +847,27 @@ function availabilityPage() {
     <input name="day" type="hidden" value="${date}">
     <div class="actions"><button class="primary">${t("save")}</button>
       ${own?action(t("removeAvailability"),"data-remove-availability","danger"):""}</div></form>
-    <section class="card">${todayCompany(true)}</section><div class="actions">${link("quick","#create/quick","primary")}</div>`;
+    <section class="card" id="availability-people">${todayCompany(true)}</section><div class="actions">${link("quick","#create/quick","primary")}</div>`;
 }
 async function saveAvailability(data) {
+  const owner=user.id,revision=++availabilityRevision;
   const endDay=data.until==="00:00"&&data.from!=="00:00"?
     new Date(Date.parse(data.day+"T00:00:00Z")+86400000).toISOString().slice(0,10):data.day;
   await api("/availability",{area:data.area,activity:data.activity,from:stockholmDate(data.day+"T"+data.from),until:stockholmDate(endDay+"T"+data.until)});
-  availability=await api("/availability");
+  const entries=await api("/availability");
+  if(user?.id!==owner||revision!==availabilityRevision)return;
+  availability=entries;scheduleAvailabilityExpiry();
   location.hash="discover";
   render();
   status("availabilitySaved");
 }
 async function removeAvailability() {
   if(!confirm(t("removeAvailabilityConfirm"))) return;
+  const owner=user.id,revision=++availabilityRevision;
   await api("/availability",{enabled:false});
-  availability=await api("/availability");
+  const entries=await api("/availability");
+  if(user?.id!==owner||revision!==availabilityRevision)return;
+  availability=entries;scheduleAvailabilityExpiry();
   if(ownAvailability()) throw new Error("server");
   location.hash="discover";
   render();
@@ -1104,7 +1202,7 @@ function plansPage() {
     <div class="card"><h2>${t("saved")}</h2>${plans.map(event=>card(event)).join("")||`<p>${t("noPlans")}</p>`}</div>`;
 }
 function memberLink(id,name) {
-  return user && !demo && Number(id)>0 ? `<a href="#member/${Number(id)}">${esc(name)}</a>` : esc(name);
+  return user && !demo && Number(id)>0 ? `<a href="#member/${Number(id)}">${esc(name)}${availabilityIndicator(id)}</a>` : esc(name);
 }
 function memberMeetupCard(e) {
   const title=`<strong>${esc(eventTitle(e))}</strong>`;
@@ -1114,7 +1212,8 @@ function memberPage(id) {
   const member=memberProfile?.id===id?memberProfile:null;
   if(!member)return `<h1>${t("memberProfile")}</h1>`;
   const organized=(member.meetups||[]).filter(e=>e.organized),participating=(member.meetups||[]).filter(e=>!e.organized);
-  return `<section class="member-heading">${avatar(member.name,member.photo)}<h1>${esc(member.name)}</h1>
+  return `<section class="member-heading">${avatar(member.name,member.photo)}<h1>${esc(member.name)}${availabilityIndicator(id)}</h1>
+    ${user.id!==id&&availability.some(entry=>Number(entry.user_id)===id&&availableToday(entry))?link("suggestMeetup",`#offer/${id}`,"primary"):""}
     ${user.id!==id?`<a class="action primary" href="#messages/${Number(id)}">${icon("message")}${t("message")}</a>${member.canMessage===false?`<p class="muted contact-rule">${t("contactRule")}</p>`:""}`:""}</section>
     <section class="card">${member.bio?`<h2>${t("bio")}</h2><p>${esc(member.bio)}</p>`:""}
     <h2>${t("spokenLanguages")}</h2><p>${esc(member.languages)||t("none")}</p>
@@ -1124,7 +1223,7 @@ function memberPage(id) {
     ${safetyActions(id,"person",id)}`;
 }
 function photoEditor() {
-  return `<h2>${t("profilePhoto")}</h2><div class="photo-editor-row">${avatar(user.name,user.photo)}<div><label class="photo-choose">${t("changePhoto")}<input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp"></label>${user.photo?action(t("removePhoto"),"data-remove-photo","danger"):""}</div></div><p class="muted">${t("photoHelp")}</p>`;
+  return `<h2>${t("profilePhoto")}</h2><p><strong>${esc(user.name)}</strong>${availabilityIndicator(user.id)}</p><div class="photo-editor-row">${avatar(user.name,user.photo)}<div><label class="photo-choose">${t("changePhoto")}<input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp"></label><label class="photo-choose camera-choose">${icon("camera")}${t("takePhoto")}<input id="profile-camera-input" type="file" accept="image/jpeg,image/png,image/webp" capture="user"></label>${user.photo?action(t("removePhoto"),"data-remove-photo","danger"):""}</div></div><p class="muted">${t("photoHelp")}</p>`;
 }
 async function prepareProfilePhoto(file) {
   if(!file||!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)throw new Error("photoInvalid");
@@ -1142,8 +1241,8 @@ let photoBusy=false;
 async function saveProfilePhoto(file,remove=false) {
   if(photoBusy||!user)return;
   photoBusy=true;const owner=user.id;
-  const input=$("profile-photo-input"),button=document.querySelector("[data-remove-photo]");
-  if(input)input.disabled=true;if(button)button.disabled=true;
+  const input=$("profile-photo-input"),camera=$("profile-camera-input"),button=document.querySelector("[data-remove-photo]");
+  if(input)input.disabled=true;if(camera)camera.disabled=true;if(button)button.disabled=true;
   try {
     status("photoSaving");
     const photo=remove?"":await prepareProfilePhoto(file);
@@ -1154,7 +1253,7 @@ async function saveProfilePhoto(file,remove=false) {
     if(route()[0]==="profile"&&$("profile-photo-editor"))$("profile-photo-editor").innerHTML=photoEditor();
     status("photoSaved");
   } catch(error){if(user?.id===owner)status(error.message);}
-  finally {photoBusy=false;if(input){input.disabled=false;input.value="";}if(button)button.disabled=false;}
+  finally {photoBusy=false;if(input){input.disabled=false;input.value="";}if(camera){camera.disabled=false;camera.value="";}if(button)button.disabled=false;window.HangaAndroid?.clearCameraPhoto?.();}
 }
 
 function profilePage() {
@@ -1269,7 +1368,7 @@ function updateChatBadge() {
 function chatContent(peer) {
   const threads=chatThreads();
   if (!peer) return threads.size?`<div class="chat-list">${[...threads.values()].map(thread=>`<a class="card chat-preview" href="#messages/${Number(thread.peer)}">
-    ${avatar(thread.name)}<strong>${esc(thread.name)}</strong>${thread.unread?`<span class="message-count">${thread.unread}</span>`:""}
+    ${avatar(thread.name)}<strong>${esc(thread.name)}${availabilityIndicator(thread.peer)}</strong>${thread.unread?`<span class="message-count">${thread.unread}</span>`:""}
     <p class="muted">${esc(thread.items[0].body)}</p><small>${esc(dateLabel(thread.items[0].created))}</small>
     </a>`).join("")}</div>`:`<p>${t("noMessages")}</p>`;
   const thread=threads.get(peer);
@@ -1294,6 +1393,7 @@ function scrollChatToLatest() {
 function messagesPage(peer) {
   return `${peer?"":`<h1>${t("messages")}</h1>${messageNavigation("messages")}`}${demo?`<p class="muted">${t("messageDemo")}</p>`:""}
     <div class="chat-shell"><div id="chat-content">${chatContent(peer)}</div>
+    ${peer&&!canCompose(peer)&&chatThreads().get(peer)?.items.some(m=>m.availability_offer&&m.sender===user.id)?`<p class="muted">${t("offerPendingHelp")}</p>`:""}
     ${peer?`<form id="chat-compose" data-form="chat" data-peer="${peer}" ${canCompose(peer)?"":"hidden"}>
       <label class="sr-only" for="chat-body">${t("message")}</label><textarea id="chat-body" name="body" rows="2" placeholder="${t("chatPlaceholder")}" required maxlength="1500"></textarea><button class="primary" aria-label="${t("send")}" title="${t("send")}">➤</button></form>`:""}</div>`;
 }
@@ -1346,6 +1446,7 @@ window.hangaRefreshChats=()=>{void refreshChats().catch(()=>{});};
 document.addEventListener("visibilitychange",()=>{
   if (document.visibilityState!=="hidden") {
     window.hangaRefreshChats();
+    updateAvailabilityViews();void refreshAvailability().catch(()=>{});
     pruneCityEvents();
     const page=route()[0];
     if(page==="discover" && $("results")) refreshResults();
@@ -1439,6 +1540,9 @@ document.addEventListener("submit",async event=>{
       if (!Number.isInteger(minutes) || minutes<0 || minutes>10080) throw new Error("invalid");
       localStorage.setItem(reminderKey(e.id),String(minutes));
       syncReminders();
+    } else if(mode==="availability-offer") {
+      await api("/availability/offer",{peer:Number(form.dataset.peer),activity:data.activity,start:stockholmDate(data.start),place:data.place,note:data.note,lang});
+      location.hash="messages/"+Number(form.dataset.peer);
     } else if(mode==="availability") {
       await saveAvailability(data);
       return;
@@ -1565,6 +1669,7 @@ document.addEventListener("click",async event=>{
   const button=event.target.closest("button[type=button]");
   if (!button) return;
   const d=button.dataset;
+  if("nextCompany" in d){nextCompany();return;}
   if("removePhoto" in d){await saveProfilePhoto(null,true);return;}
   if (d.friendTab) {
     friendTab=d.friendTab;
@@ -1710,7 +1815,7 @@ document.addEventListener("click",async event=>{
   finally { button.disabled=false; }
 });
 document.addEventListener("change",event=>{
-  if(event.target.id==="profile-photo-input"&&event.target.files?.[0]){void saveProfilePhoto(event.target.files[0]);return;}
+  if(["profile-photo-input","profile-camera-input"].includes(event.target.id)&&event.target.files?.[0]){void saveProfilePhoto(event.target.files[0]);return;}
   const form=event.target.form;
   if(form?.dataset.form==="event") {
     if(event.target.name==="meetupMode") {
@@ -1741,6 +1846,7 @@ document.addEventListener("change",event=>{
   render();
 });
 setInterval(()=>{
+  if(document.visibilityState!=="hidden")void refreshAvailability().catch(()=>{});
   if (route()[0]!=="discover" || !$("results")) return;
   if($("today-company")) $("today-company").innerHTML=todayCompany();
   refreshResults();
