@@ -1,6 +1,7 @@
 "use strict";
 
 const copy = {
+  nextCompany:["Nästa 3","Next 3"], availableTodayBadge:["Tillgänglig idag","Available today"], companyBatch:["Visar","Showing"],
   profilePhoto:["Profilbild","Profile photo"], changePhoto:["Välj profilbild","Choose profile photo"], removePhoto:["Ta bort bild","Remove photo"], photoHelp:["Välj en bild från telefonen. Den beskärs till en kvadrat och visas på din offentliga profil.","Choose a photo from your phone. It is cropped to a square and shown on your public profile."], photoSaved:["Profilbilden har sparats.","Profile photo saved."], photoInvalid:["Välj en JPG-, PNG- eller WebP-bild på högst 10 MB.","Choose a JPG, PNG or WebP image up to 10 MB."], photoSaving:["Sparar bilden…","Saving photo…"], organizedMeetups:["Organiserade träffar","Meetups organized"], participatingMeetups:["Deltar i","Meetups attending"], noPublicMeetups:["Inga offentliga träffar att visa.","No public meetups to show."], contactRule:["Du kan skriva när ni är vänner eller deltar i samma träff. Tidigare konversationer kan fortfarande läsas.","You can send messages when you are friends or attend the same meetup. Previous conversations remain readable."], privateEmail:["Din e-post visas aldrig på den offentliga profilen.","Your email is never shown on your public profile."],
 
   userCreatedMeetups:["Träffar skapade av användare","Meetups created by users"], mixedSourcesHint:["Även Göteborgs stadskalender visas. Välj källa i filtren.","Göteborg’s city calendar is also included. Choose a source in the filters."],
@@ -231,6 +232,8 @@ let token = demo ? localStorage.hangaDemoToken || "" : hangaCloud.signedIn ? "fi
 let pendingEmail = "";
 let blockedPeople=[];
 let memberProfile = null;
+let companyOrder=[],companyOffset=0,companyDay="",companyOwner=0;
+let availabilityRevision=0,availabilityRequest,availabilityTimer;
 let availability=[],followingPeople=[],groupRows=[],groupEventId=0,feedbackData={},againRows=[],againEventId=0;
 let friends=[],friendContext=null,chatPeer=null;
 let friendSearch="",friendTab="friends";
@@ -413,6 +416,7 @@ function syncAlertProfile() {
 }
 window.hangaSyncAlerts=syncAlertProfile;
 function session(result) {
+  availabilityRevision++;clearTimeout(availabilityTimer);companyOrder=[];companyOffset=0;companyDay="";companyOwner=0;
   messageList=[];
   availability=[];followingPeople=[];groupRows=[];groupEventId=0;feedbackData={};againRows=[];againEventId=0;friends=[];friendContext=null;chatPeer=null;friendSearch="";friendTab="friends";
   token=result?.token || "";
@@ -556,11 +560,10 @@ async function load() {
         if (error.message==="blocked") status("blocked");
       } else throw error; }
     }
-    if (!demo && user && ["discover","availability"].includes(page)) {
-      const entries=await api("/availability");
-      if(version!==refreshId) return;
-      availability=entries;
-      if(page==="discover" && $("today-company")) $("today-company").innerHTML=todayCompany();
+    if (!demo && user) {
+      const owner=user.id;
+      await refreshAvailability();
+      if(version!==refreshId||user?.id!==owner)return;
     }
     if (!demo && user && page==="profile") followingPeople=await api("/follows");
     if(!demo&&user&&page==="friends") {
@@ -728,21 +731,73 @@ function authPage(mode) {
     <div class="actions">${register?"":action(t("forgotPassword"),"data-forgot-password")} ${link(register?"login":"register",register?"#auth":"#auth/register")}
     </div>`;
 }
+function availableToday(entry) {
+  return Number.isFinite(Date.parse(entry.from))&&Date.parse(entry.until)>Date.now()&&
+    localDate(new Date(entry.from)).slice(0,10)===localDate(new Date()).slice(0,10);
+}
 function ownAvailability() {
-  return availability.find(entry=>Number(entry.user_id)===Number(user?.id)&&Date.parse(entry.until)>Date.now());
+  return availability.find(entry=>Number(entry.user_id)===Number(user?.id)&&availableToday(entry));
+}
+function availabilityIndicator(id) {
+  const active=availability.some(entry=>Number(entry.user_id)===Number(id)&&availableToday(entry));
+  return `<span class="availability-dot" data-availability-id="${Number(id)}" role="img" aria-label="${t("availableTodayBadge")}" title="${t("availableTodayBadge")}" ${active?"":"hidden"}></span>`;
+}
+function updateAvailabilityViews() {
+  if(route()[0]==="discover"&&$("today-company"))$("today-company").innerHTML=todayCompany();
+  if(route()[0]==="availability"&&$("availability-people"))$("availability-people").innerHTML=todayCompany(true);
+  document.querySelectorAll("[data-availability-id]").forEach(dot=>{
+    dot.hidden=!availability.some(entry=>Number(entry.user_id)===Number(dot.dataset.availabilityId)&&availableToday(entry));
+  });
+}
+function scheduleAvailabilityExpiry() {
+  clearTimeout(availabilityTimer);
+  const ends=availability.filter(availableToday).map(entry=>Date.parse(entry.until));
+  if(ends.length)availabilityTimer=setTimeout(()=>{updateAvailabilityViews();scheduleAvailabilityExpiry();},Math.min(2147483647,Math.max(1,Math.min(...ends)-Date.now()+1)));
+}
+function refreshAvailability() {
+  if(demo||!user)return Promise.resolve();
+  const owner=user.id,revision=availabilityRevision;
+  if(availabilityRequest?.owner===owner&&availabilityRequest.revision===revision)return availabilityRequest.promise;
+  const request={owner,revision};
+  request.promise=(async()=>{
+    const entries=await api("/availability");
+    if(user?.id!==owner||revision!==availabilityRevision)return;
+    availability=entries;updateAvailabilityViews();scheduleAvailabilityExpiry();
+  })().finally(()=>{if(availabilityRequest===request)availabilityRequest=undefined;});
+  availabilityRequest=request;return request.promise;
 }
 function availabilitySummary(entry) {
   return `${esc(t(entry.activity))} · ${esc(entry.area)}<small>${esc(localDate(new Date(entry.from)).slice(11))}–${esc(localDate(new Date(entry.until)).slice(11))}</small>`;
 }
+function companyCandidates() {
+  return [...new Map(availability.filter(entry=>Number(entry.user_id)!==Number(user?.id)&&availableToday(entry)).map(entry=>[Number(entry.user_id),entry])).values()];
+}
+function companySelection(current) {
+  const day=localDate(new Date()).slice(0,10),owner=Number(user?.id)||0;
+  if(day!==companyDay||owner!==companyOwner){companyOrder=[];companyOffset=0;companyDay=day;companyOwner=owner;}
+  const ids=new Set(current.map(entry=>Number(entry.user_id)));
+  companyOrder=companyOrder.filter(id=>ids.has(id));
+  const added=[...ids].filter(id=>!companyOrder.includes(id));
+  for(let i=added.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[added[i],added[j]]=[added[j],added[i]];}
+  companyOrder.push(...added);
+  companyOffset=Math.min(companyOffset,Math.max(0,(Math.ceil(companyOrder.length/3)-1)*3));
+  const byId=new Map(current.map(entry=>[Number(entry.user_id),entry]));
+  return companyOrder.slice(companyOffset,companyOffset+3).map(id=>byId.get(id));
+}
+function nextCompany() {
+  const current=companyCandidates();companySelection(current);
+  companyOffset=companyOffset+3>=companyOrder.length?0:companyOffset+3;
+  updateAvailabilityViews();
+  $("today-company")?.querySelector("[data-next-company]")?.focus();
+}
 function todayCompany(all=false) {
-  const own=ownAvailability();
-  const current=availability.filter(entry=>Number(entry.user_id)!==Number(user?.id)&&Date.parse(entry.until)>Date.now());
+  const own=ownAvailability(),current=companyCandidates(),selected=all?current:companySelection(current);
   return `<div class="rows between"><h2>${t("todayCompany")}</h2>${!all&&!own?link("availableToday","#availability"):""}</div>
-    ${own&&!all?`<section class="my-availability"><strong>${t("myAvailability")}</strong><p>${availabilitySummary(own)}</p>
+    ${own&&!all?`<section class="my-availability"><strong>${t("myAvailability")}</strong><p>${memberLink(user.id,user.name)}</p><p>${availabilitySummary(own)}</p>
       <div class="actions">${link("editAvailability","#availability")}${action(t("removeAvailability"),"data-remove-availability","danger")}</div></section>`:""}
-    ${current.length?`<ul class="availability-list company-grid">${(all?current:current.slice(0,3)).map(entry=>`<li>
+    ${current.length?`<ul class="availability-list company-grid ${all?"company-all":""}" aria-live="polite">${selected.map(entry=>`<li>
       ${avatar(entry.name)}<div>${memberLink(entry.user_id,entry.name)}<p>${availabilitySummary(entry)}</p></div>
-      </li>`).join("")}</ul>${!all&&current.length>3?link("viewAvailability","#availability"):""}`:!own?`<p class="muted">${t("todayEmpty")}</p>`:""}`;
+      </li>`).join("")}</ul>${!all&&current.length>3?`<div class="company-pagination"><small class="muted">${t("companyBatch")} ${companyOffset+1}–${companyOffset+selected.length} / ${current.length}</small>${action(t("nextCompany"),"data-next-company")}</div>`:""}`:!own?`<p class="muted">${t("todayEmpty")}</p>`:""}`;
 }
 function availabilityPage() {
   const own=ownAvailability();
@@ -755,21 +810,27 @@ function availabilityPage() {
     <input name="day" type="hidden" value="${date}">
     <div class="actions"><button class="primary">${t("save")}</button>
       ${own?action(t("removeAvailability"),"data-remove-availability","danger"):""}</div></form>
-    <section class="card">${todayCompany(true)}</section><div class="actions">${link("quick","#create/quick","primary")}</div>`;
+    <section class="card" id="availability-people">${todayCompany(true)}</section><div class="actions">${link("quick","#create/quick","primary")}</div>`;
 }
 async function saveAvailability(data) {
+  const owner=user.id,revision=++availabilityRevision;
   const endDay=data.until==="00:00"&&data.from!=="00:00"?
     new Date(Date.parse(data.day+"T00:00:00Z")+86400000).toISOString().slice(0,10):data.day;
   await api("/availability",{area:data.area,activity:data.activity,from:stockholmDate(data.day+"T"+data.from),until:stockholmDate(endDay+"T"+data.until)});
-  availability=await api("/availability");
+  const entries=await api("/availability");
+  if(user?.id!==owner||revision!==availabilityRevision)return;
+  availability=entries;scheduleAvailabilityExpiry();
   location.hash="discover";
   render();
   status("availabilitySaved");
 }
 async function removeAvailability() {
   if(!confirm(t("removeAvailabilityConfirm"))) return;
+  const owner=user.id,revision=++availabilityRevision;
   await api("/availability",{enabled:false});
-  availability=await api("/availability");
+  const entries=await api("/availability");
+  if(user?.id!==owner||revision!==availabilityRevision)return;
+  availability=entries;scheduleAvailabilityExpiry();
   if(ownAvailability()) throw new Error("server");
   location.hash="discover";
   render();
@@ -1104,7 +1165,7 @@ function plansPage() {
     <div class="card"><h2>${t("saved")}</h2>${plans.map(event=>card(event)).join("")||`<p>${t("noPlans")}</p>`}</div>`;
 }
 function memberLink(id,name) {
-  return user && !demo && Number(id)>0 ? `<a href="#member/${Number(id)}">${esc(name)}</a>` : esc(name);
+  return user && !demo && Number(id)>0 ? `<a href="#member/${Number(id)}">${esc(name)}${availabilityIndicator(id)}</a>` : esc(name);
 }
 function memberMeetupCard(e) {
   const title=`<strong>${esc(eventTitle(e))}</strong>`;
@@ -1114,7 +1175,7 @@ function memberPage(id) {
   const member=memberProfile?.id===id?memberProfile:null;
   if(!member)return `<h1>${t("memberProfile")}</h1>`;
   const organized=(member.meetups||[]).filter(e=>e.organized),participating=(member.meetups||[]).filter(e=>!e.organized);
-  return `<section class="member-heading">${avatar(member.name,member.photo)}<h1>${esc(member.name)}</h1>
+  return `<section class="member-heading">${avatar(member.name,member.photo)}<h1>${esc(member.name)}${availabilityIndicator(id)}</h1>
     ${user.id!==id?`<a class="action primary" href="#messages/${Number(id)}">${icon("message")}${t("message")}</a>${member.canMessage===false?`<p class="muted contact-rule">${t("contactRule")}</p>`:""}`:""}</section>
     <section class="card">${member.bio?`<h2>${t("bio")}</h2><p>${esc(member.bio)}</p>`:""}
     <h2>${t("spokenLanguages")}</h2><p>${esc(member.languages)||t("none")}</p>
@@ -1124,7 +1185,7 @@ function memberPage(id) {
     ${safetyActions(id,"person",id)}`;
 }
 function photoEditor() {
-  return `<h2>${t("profilePhoto")}</h2><div class="photo-editor-row">${avatar(user.name,user.photo)}<div><label class="photo-choose">${t("changePhoto")}<input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp"></label>${user.photo?action(t("removePhoto"),"data-remove-photo","danger"):""}</div></div><p class="muted">${t("photoHelp")}</p>`;
+  return `<h2>${t("profilePhoto")}</h2><p><strong>${esc(user.name)}</strong>${availabilityIndicator(user.id)}</p><div class="photo-editor-row">${avatar(user.name,user.photo)}<div><label class="photo-choose">${t("changePhoto")}<input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp"></label>${user.photo?action(t("removePhoto"),"data-remove-photo","danger"):""}</div></div><p class="muted">${t("photoHelp")}</p>`;
 }
 async function prepareProfilePhoto(file) {
   if(!file||!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)throw new Error("photoInvalid");
@@ -1269,7 +1330,7 @@ function updateChatBadge() {
 function chatContent(peer) {
   const threads=chatThreads();
   if (!peer) return threads.size?`<div class="chat-list">${[...threads.values()].map(thread=>`<a class="card chat-preview" href="#messages/${Number(thread.peer)}">
-    ${avatar(thread.name)}<strong>${esc(thread.name)}</strong>${thread.unread?`<span class="message-count">${thread.unread}</span>`:""}
+    ${avatar(thread.name)}<strong>${esc(thread.name)}${availabilityIndicator(thread.peer)}</strong>${thread.unread?`<span class="message-count">${thread.unread}</span>`:""}
     <p class="muted">${esc(thread.items[0].body)}</p><small>${esc(dateLabel(thread.items[0].created))}</small>
     </a>`).join("")}</div>`:`<p>${t("noMessages")}</p>`;
   const thread=threads.get(peer);
@@ -1346,6 +1407,7 @@ window.hangaRefreshChats=()=>{void refreshChats().catch(()=>{});};
 document.addEventListener("visibilitychange",()=>{
   if (document.visibilityState!=="hidden") {
     window.hangaRefreshChats();
+    updateAvailabilityViews();void refreshAvailability().catch(()=>{});
     pruneCityEvents();
     const page=route()[0];
     if(page==="discover" && $("results")) refreshResults();
@@ -1565,6 +1627,7 @@ document.addEventListener("click",async event=>{
   const button=event.target.closest("button[type=button]");
   if (!button) return;
   const d=button.dataset;
+  if("nextCompany" in d){nextCompany();return;}
   if("removePhoto" in d){await saveProfilePhoto(null,true);return;}
   if (d.friendTab) {
     friendTab=d.friendTab;
@@ -1741,6 +1804,7 @@ document.addEventListener("change",event=>{
   render();
 });
 setInterval(()=>{
+  if(document.visibilityState!=="hidden")void refreshAvailability().catch(()=>{});
   if (route()[0]!=="discover" || !$("results")) return;
   if($("today-company")) $("today-company").innerHTML=todayCompany();
   refreshResults();

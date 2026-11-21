@@ -8,7 +8,7 @@ function ui() {
   const context=vm.createContext({Intl,Date,URL,URLSearchParams,console,
     setInterval(){},setTimeout(){},clearTimeout(){},
     localStorage:{getItem(){return null;},removeItem(){},setItem(){}},
-    window:{addEventListener(){}},document:{addEventListener(){},getElementById(){return {addEventListener(){}};}},location:{hash:'#event/10'},
+    window:{addEventListener(){}},document:{querySelectorAll(){return [];},addEventListener(){},getElementById(){return {addEventListener(){},querySelector(){return null;}};}},location:{hash:'#event/10'},
     hangaCloud:{forget(){},configuration:{url:'https://example.test',key:'test'},signedIn:true}});
   const run=js=>vm.runInContext(js,context);
   run(source);
@@ -267,4 +267,56 @@ test('member profile has photo, name, chat, languages and distinct meetup roles 
     assert.match(run(`avatar('Anna','javascript:alert(1)')`),/>A<\/span>/);
     assert.match(run(`avatar('Anna','https://tracker.invalid/image')`),/>A<\/span>/);
   }
+});
+
+test('company today shuffles once and pages through distinct groups of three, excluding self and expired entries',()=>{
+  const run=ui();
+  run(`globalThis.randomCalls=0;Math.random=()=>{randomCalls++;return 0};
+    availability=Array.from({length:7},(_,i)=>({user_id:i+2,name:'Member '+i,area:'Tuve',activity:'walk',from:new Date().toISOString(),until:new Date(Date.now()+600000).toISOString()}));
+    availability.push({user_id:1,name:'Davor',area:'Tuve',activity:'walk',from:new Date().toISOString(),until:new Date(Date.now()+600000).toISOString()},
+      {user_id:90,name:'Expired',from:new Date().toISOString(),until:new Date(Date.now()-1000).toISOString()});`);
+  const first=run('companySelection(companyCandidates()).map(p=>p.user_id).join(",")');
+  assert.equal(first.split(',').length,3);
+  assert.notEqual(first,'2,3,4');
+  const calls=run('randomCalls');
+  assert.equal(run('companySelection(companyCandidates()).map(p=>p.user_id).join(",")'),first);
+  assert.equal(run('randomCalls'),calls);
+  const html=run('todayCompany()');assert.match(html,/data-next-company/);
+  assert.equal((html.match(/<li>/g)||[]).length,3);assert.doesNotMatch(html,/Expired/);
+  run('nextCompany()');
+  const second=run('companySelection(companyCandidates()).map(p=>p.user_id).join(",")');
+  run('nextCompany()');
+  const third=run('companySelection(companyCandidates()).map(p=>p.user_id).join(",")');
+  const all=[...first.split(','),...second.split(','),...third.split(',')];
+  assert.equal(all.length,7);assert.equal(new Set(all).size,7);assert.ok(!all.includes('1')&&!all.includes('90'));
+  run('nextCompany()');assert.equal(run('companySelection(companyCandidates()).map(p=>p.user_id).join(",")'),first);
+  run('availability=availability.filter(p=>p.user_id===2||p.user_id===3)');
+  assert.doesNotMatch(run('todayCompany()'),/data-next-company/);
+});
+
+test('availability badges use current Stockholm day and disappear on expiry, removal and account switch',()=>{
+  const run=ui();
+  run(`globalThis.nowValue=Date.parse('2026-11-20T21:00:00Z');globalThis.NativeDate=Date;
+    Date=class extends NativeDate{constructor(...args){super(...(args.length?args:[nowValue]))}static now(){return nowValue}};
+    availability=[{user_id:1,name:'Davor',area:'Tuve',activity:'walk',from:'2026-11-20T20:00:00Z',until:'2026-11-20T23:00:00Z'}];`);
+  let html=run('availabilityIndicator(1)');assert.doesNotMatch(html,/hidden/);assert.match(html,/Tillgänglig idag/);
+  assert.match(run('photoEditor()'),/Davor<\/strong><span class="availability-dot"/);
+  run(`memberProfile={id:1,name:'Davor',meetups:[]}`);
+  assert.match(run('memberPage(1)'),/Davor<span class="availability-dot"/);
+  run('nowValue+=2*3600000');assert.match(run('availabilityIndicator(1)'),/hidden/);
+  run(`nowValue=NativeDate.parse('2026-11-20T21:00:00Z');availability[0].from='2026-11-19T21:00:00Z'`);
+  assert.match(run('availabilityIndicator(1)'),/hidden/);
+  run('availability=[]');assert.match(run('availabilityIndicator(1)'),/hidden/);
+  run(`companyOrder=[2,3,4];companyOffset=3;session()`);assert.equal(run('companyOrder.length+companyOffset'),0);
+});
+
+test('an older availability response cannot restore a removed or previous-account availability',async()=>{
+  const run=ui();
+  run(`globalThis.finishAvailability=null;api=()=>new Promise(resolve=>{finishAvailability=resolve});`);
+  const pending=run('refreshAvailability()');
+  run('availabilityRevision++;availability=[];finishAvailability([{user_id:1,name:"Old availability"}])');
+  await pending;assert.equal(run('availability.length'),0);
+  const next=run('refreshAvailability()');
+  run('user={id:9,name:"Other"};finishAvailability([{user_id:1,name:"Private old list"}])');
+  await next;assert.equal(run('availability.length'),0);
 });
