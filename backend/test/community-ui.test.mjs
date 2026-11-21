@@ -320,3 +320,30 @@ test('an older availability response cannot restore a removed or previous-accoun
   run('user={id:9,name:"Other"};finishAvailability([{user_id:1,name:"Private old list"}])');
   await next;assert.equal(run('availability.length'),0);
 });
+
+test('company cards link photos to profiles and offer a meeting, with a full list and separate camera chooser',()=>{
+  const run=ui();
+  run(`availability=[{user_id:2,name:'Anna',area:'Tuve',activity:'walk',from:new Date(Date.now()-60000).toISOString(),until:new Date(Date.now()+3600000).toISOString()}];companyPhotoCache.set(2,{photo:'data:image/jpeg;base64,/9j/2Q==',checked:Date.now()});memberProfile={id:2,name:'Anna',meetups:[]}`);
+  for(const language of ['sv','en']) {
+    run(`lang='${language}'`);
+    const cards=run('todayCompany()');
+    assert.match(cards,/data-company-photo="2" href="#member\/2"/);
+    assert.match(cards,/<img class="avatar avatar-photo"/);
+    assert.match(cards,/#offer\/2/);assert.match(cards,/#company/);
+    assert.match(run('companyPage()'),/#offer\/2/);
+    assert.match(run('memberPage(2)'),/#offer\/2/);
+    assert.match(run('offerPage(2)'),/data-form="availability-offer" data-peer="2"/);
+    assert.match(run('offerPage(2)'),/name="place"/);
+    assert.match(run('photoEditor()'),/id="profile-camera-input"[^>]*capture="user"/);
+  }
+  run('availability=[]');assert.doesNotMatch(run('offerPage(2)'),/data-form="availability-offer"/);
+});
+
+test('late company photo responses do not leak images across accounts',async()=>{
+  const run=ui();
+  run(`availability=[{user_id:2,from:new Date().toISOString(),until:new Date(Date.now()+600000).toISOString()}];document.querySelectorAll=()=>[{dataset:{companyPhoto:'2'}}];globalThis.finishPhoto=null;api=()=>new Promise(resolve=>{finishPhoto=resolve});`);
+  const pending=run('refreshCompanyPhotos()');
+  run('session();user={id:9,name:"Other"};finishPhoto({photo:"private-old-image"})');
+  await pending;
+  assert.equal(run('companyPhotoCache.size'),0);
+});

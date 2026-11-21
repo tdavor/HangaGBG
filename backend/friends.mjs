@@ -1,3 +1,4 @@
+import {availabilityContact} from "./availability-contact.mjs";
 const eq=(field,value)=>[field,'EQUAL',value];
 const fail=code=>{throw new Error(code)};
 export const friendKey=(a,b)=>Math.min(a,b)+'-'+Math.max(a,b);
@@ -59,7 +60,8 @@ export async function friendAction(db,name,p,me,{integer,notices,writeMessage,en
     canRequest:!relation?.status||relation.status==='declined'&&relation.retryAfter<=Date.now()?await connectionExists(db,uid,peer):false};
   if(name==='chat_peer') {
     const adminContact=!!me.admin||await canReplyToAdmin(db,uid,peer,env);
-    return {id:peer,name:person.name,friend:relation?.status==='accepted',adminContact,canSend:adminContact||relation?.status==='accepted'||!!await sharedMeetup(db,uid,peer)};
+    const companyContact=await availabilityContact(db,uid,peer);
+    return {id:peer,name:person.name,friend:relation?.status==='accepted',adminContact,availabilityContact:companyContact,canSend:adminContact||companyContact||relation?.status==='accepted'||!!await sharedMeetup(db,uid,peer)};
   }
   if(name==='friend_remove') {
     if(relation?.status==='declined') return {};

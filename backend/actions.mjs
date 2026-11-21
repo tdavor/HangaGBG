@@ -1,3 +1,4 @@
+import {availabilityContact} from "./availability-contact.mjs";
 import {validatePhoto,profilePhoto,memberMeetups} from "./profile-media.mjs";
 import {communityAction,eventExtras,notifyFollowers,weeklyStart,sendDueNotices} from "./community.mjs";
 import {socialFields,socialAction,resetPendingProposal,withdrawIdeaMember} from "./social.mjs";
@@ -133,7 +134,7 @@ async function messages(db,id,chat=false) {
   });
 }
 
-export const reads = new Set(["events","me","registration","participants","messages","notices","admin","block_list","poll","member_profile","chat_inbox","availability_list","follow_list","group_messages","feedback_get","again_list","friend_list","friend_status","chat_peer"]);
+export const reads = new Set(["events","me","registration","participants","messages","notices","admin","block_list","poll","member_profile","member_photo","chat_inbox","availability_list","follow_list","group_messages","feedback_get","again_list","friend_list","friend_status","chat_peer"]);
 export async function action(db, name, p, identity, env) {
   if(name==="due_notices") {if(identity!==null) fail("forbidden");await sendDueNotices(db,notices,integer(p.id));return {};}
   if (name==="registration") return {registration:(await db.get("settings","app"))?.registration!==false};
@@ -203,12 +204,17 @@ export async function action(db, name, p, identity, env) {
     db.put("profiles",uid,profile);
     return {...publicProfile(profile),photo:await profilePhoto(db,uid)};
   }
-  const community=await communityAction(db,name,p,me,{text,integer,nextIds,notices});
+  const community=await communityAction(db,name,p,me,{text,integer,nextIds,notices,writeMessage});
   if(community!==null) return community;
   const friend=await friendAction(db,name,p,me,{integer,notices,writeMessage,env});
   if(friend!==null) return friend;
   const social=await socialAction(db,name,p,me,{integer,notices});
   if(social!==null) return social;
+  if(name==="member_photo") {
+    const id=integer(p.id),person=await db.get("profiles",id);
+    if(!person||person.deleted||person.blocked||await db.get("blocks",planKey(uid,id))||await db.get("blocks",planKey(id,uid)))fail("missing");
+    return {photo:await profilePhoto(db,id)};
+  }
   if (name==="member_profile") {
     const id=integer(p.id);
     const [member,outgoing,incoming]=await Promise.all([
@@ -254,6 +260,7 @@ export async function action(db, name, p, identity, env) {
     await messagingPeer(db,uid,peer);
     if(me.admin) return writeMessage(db,me,peer,0,"Hänga Gbg",p.body,{admin_message:true});
     if(await canReplyToAdmin(db,uid,peer,env)) return writeMessage(db,me,peer,0,"Hänga Gbg",p.body);
+    if(await availabilityContact(db,uid,peer))return writeMessage(db,me,peer,0,"Hänga Gbg",p.body);
     if((await db.get("friendships",friendKey(uid,peer)))?.status==="accepted") return writeMessage(db,me,peer,0,"Hänga Gbg",p.body);
     const [sent,received]=await Promise.all([
       db.query("messages",[eq("sender",uid),eq("recipient",peer)]),

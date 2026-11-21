@@ -1,6 +1,9 @@
 "use strict";
 
 const copy = {
+  company:["Tillgängliga idag","Available today"], offer:["Föreslå en träff","Suggest a meetup"],
+  suggestMeetup:["Föreslå en träff","Suggest a meetup"], allAvailable:["Alla tillgängliga idag","Everyone available today"], offerHelp:["Skicka ett privat förslag inom personens angivna tid. Mottagaren kan svara i chatten. Ingen vänskap eller anmälan skapas automatiskt.","Send a private suggestion within the person's available time. They can reply in chat. No friendship or event registration is created automatically."], offerPending:["Du har redan skickat ett förslag för den här tillgängligheten.","You have already sent a suggestion for this availability."], offerPendingHelp:["Ditt förslag är skickat. Du kan fortsätta skriva när mottagaren har svarat.","Your suggestion has been sent. You can continue messaging once the recipient replies."], availabilityChatHelp:["Ni kan svara privat på förslaget här.","You can discuss the suggestion privately here."], availabilityEnded:["Tillgängligheten har upphört eller tiden räcker inte längre för ett nytt förslag.","This availability has ended or there is no longer enough time for a new suggestion."], takePhoto:["Ta en bild","Take a photo"],
+
   nextCompany:["Nästa 3","Next 3"], availableTodayBadge:["Tillgänglig idag","Available today"], companyBatch:["Visar","Showing"],
   profilePhoto:["Profilbild","Profile photo"], changePhoto:["Välj profilbild","Choose profile photo"], removePhoto:["Ta bort bild","Remove photo"], photoHelp:["Välj en bild från telefonen. Den beskärs till en kvadrat och visas på din offentliga profil.","Choose a photo from your phone. It is cropped to a square and shown on your public profile."], photoSaved:["Profilbilden har sparats.","Profile photo saved."], photoInvalid:["Välj en JPG-, PNG- eller WebP-bild på högst 10 MB.","Choose a JPG, PNG or WebP image up to 10 MB."], photoSaving:["Sparar bilden…","Saving photo…"], organizedMeetups:["Organiserade träffar","Meetups organized"], participatingMeetups:["Deltar i","Meetups attending"], noPublicMeetups:["Inga offentliga träffar att visa.","No public meetups to show."], contactRule:["Du kan skriva när ni är vänner eller deltar i samma träff. Tidigare konversationer kan fortfarande läsas.","You can send messages when you are friends or attend the same meetup. Previous conversations remain readable."], privateEmail:["Din e-post visas aldrig på den offentliga profilen.","Your email is never shown on your public profile."],
 
@@ -232,6 +235,7 @@ let token = demo ? localStorage.hangaDemoToken || "" : hangaCloud.signedIn ? "fi
 let pendingEmail = "";
 let blockedPeople=[];
 let memberProfile = null;
+let companyPhotoCache=new Map(),companyPhotoLoads=new Map();
 let companyOrder=[],companyOffset=0,companyDay="",companyOwner=0;
 let availabilityRevision=0,availabilityRequest,availabilityTimer;
 let availability=[],followingPeople=[],groupRows=[],groupEventId=0,feedbackData={},againRows=[],againEventId=0;
@@ -416,6 +420,7 @@ function syncAlertProfile() {
 }
 window.hangaSyncAlerts=syncAlertProfile;
 function session(result) {
+  companyPhotoCache.clear();companyPhotoLoads.clear();
   availabilityRevision++;clearTimeout(availabilityTimer);companyOrder=[];companyOffset=0;companyDay="";companyOwner=0;
   messageList=[];
   availability=[];followingPeople=[];groupRows=[];groupEventId=0;feedbackData={};againRows=[];againEventId=0;friends=[];friendContext=null;chatPeer=null;friendSearch="";friendTab="friends";
@@ -633,7 +638,7 @@ function hasArea(event,area) {
   return event.area===area;
 }
 function icon(name) {
-  const paths={search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/>',plus:'<path d="M12 4v16M4 12h16"/>',person:'<circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/>',friends:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 5v2"/>',message:'<path d="M21 15a3 3 0 0 1-3 3H8l-5 4V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z"/>',gear:'<path d="m9 3 1-2h4l1 2 3 2 2 .5 2 3-1 2v3l1 2-2 3-2 .5-3 2-1 2h-4l-1-2-3-2-2-.5-2-3 1-2v-3l-1-2 2-3L6 5z"/><circle cx="12" cy="12" r="3"/>',walk:'<circle cx="14" cy="4" r="2"/><path d="m7 21 4-8 4 3 1 5M4 11l5-3 4 1 3 4h4M11 8l-1 6"/>',fika:'<path d="M4 8h12v7a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 9h2a3 3 0 0 1 0 6h-2M7 2v3m5-3v3M2 23h17"/>',culture:'<path d="m2 8 10-6 10 6zM5 10v9m7-9v9m7-9v9M2 22h20"/>',other:'<path d="m12 2 3 6 7 1-5 5 1 8-6-4-6 4 1-8-5-5 7-1z"/>'};
+  const paths={camera:'<path d="M3 7h4l2-3h6l2 3h4v14H3z"/><circle cx="12" cy="13" r="4"/>',search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/>',plus:'<path d="M12 4v16M4 12h16"/>',person:'<circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/>',friends:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 5v2"/>',message:'<path d="M21 15a3 3 0 0 1-3 3H8l-5 4V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z"/>',gear:'<path d="m9 3 1-2h4l1 2 3 2 2 .5 2 3-1 2v3l1 2-2 3-2 .5-3 2-1 2h-4l-1-2-3-2-2-.5-2-3 1-2v-3l-1-2 2-3L6 5z"/><circle cx="12" cy="12" r="3"/>',walk:'<circle cx="14" cy="4" r="2"/><path d="m7 21 4-8 4 3 1 5M4 11l5-3 4 1 3 4h4M11 8l-1 6"/>',fika:'<path d="M4 8h12v7a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 9h2a3 3 0 0 1 0 6h-2M7 2v3m5-3v3M2 23h17"/>',culture:'<path d="m2 8 10-6 10 6zM5 10v9m7-9v9m7-9v9M2 22h20"/>',other:'<path d="m12 2 3 6 7 1-5 5 1 8-6-4-6 4 1-8-5-5 7-1z"/>'};
   return `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.other}</svg>`;
 }
 function avatar(name,photo="") {
@@ -667,6 +672,8 @@ function render() {
     ${link("login",Number(id)>0?`#auth/login/chat/${Number(id)}`:"#auth","primary")}`;
   else if (!user) html=`<h1>${t(page)}</h1><p>${t("loginRequired")}</p>${link("login","#auth","primary")}`;
   else if (page==="availability") html=availabilityPage();
+  else if(page==="company")html=companyPage();
+  else if(page==="offer")html=offerPage(Number(id));
   else if (page==="group") html=groupPage(Number(id));
   else if (page==="feedback") html=feedbackPage(Number(id));
   else if (page==="again") html=againPage(Number(id));
@@ -687,6 +694,7 @@ function render() {
   else html=discoverPage();
   if(page==="create"&&!id&&user) html=`<div class="actions">${link("quick","#create/quick")}</div>`+html;
   $("main").innerHTML=html;
+  if(["discover","company","availability"].includes(page))void refreshCompanyPhotos();
   if (page==="messages") scrollChatToLatest();
   if (page==="group" && $("group-content")) $("group-content").scrollTop=$("group-content").scrollHeight;
 }
@@ -745,6 +753,8 @@ function availabilityIndicator(id) {
 function updateAvailabilityViews() {
   if(route()[0]==="discover"&&$("today-company"))$("today-company").innerHTML=todayCompany();
   if(route()[0]==="availability"&&$("availability-people"))$("availability-people").innerHTML=todayCompany(true);
+  if(route()[0]==="company"&&$("company-list"))$("company-list").innerHTML=todayCompany(true);
+  if(["discover","company","availability"].includes(route()[0]))void refreshCompanyPhotos();
   document.querySelectorAll("[data-availability-id]").forEach(dot=>{
     dot.hidden=!availability.some(entry=>Number(entry.user_id)===Number(dot.dataset.availabilityId)&&availableToday(entry));
   });
@@ -792,12 +802,39 @@ function nextCompany() {
 }
 function todayCompany(all=false) {
   const own=ownAvailability(),current=companyCandidates(),selected=all?current:companySelection(current);
-  return `<div class="rows between"><h2>${t("todayCompany")}</h2>${!all&&!own?link("availableToday","#availability"):""}</div>
+  return `${all?"":`<div class="rows between"><h2>${t("todayCompany")}</h2>${!own?link("availableToday","#availability"):""}</div>`}
     ${own&&!all?`<section class="my-availability"><strong>${t("myAvailability")}</strong><p>${memberLink(user.id,user.name)}</p><p>${availabilitySummary(own)}</p>
       <div class="actions">${link("editAvailability","#availability")}${action(t("removeAvailability"),"data-remove-availability","danger")}</div></section>`:""}
     ${current.length?`<ul class="availability-list company-grid ${all?"company-all":""}" aria-live="polite">${selected.map(entry=>`<li>
-      ${avatar(entry.name)}<div>${memberLink(entry.user_id,entry.name)}<p>${availabilitySummary(entry)}</p></div>
-      </li>`).join("")}</ul>${!all&&current.length>3?`<div class="company-pagination"><small class="muted">${t("companyBatch")} ${companyOffset+1}–${companyOffset+selected.length} / ${current.length}</small>${action(t("nextCompany"),"data-next-company")}</div>`:""}`:!own?`<p class="muted">${t("todayEmpty")}</p>`:""}`;
+      <a data-company-photo="${Number(entry.user_id)}" href="#member/${Number(entry.user_id)}" aria-label="${esc(entry.name)}">${avatar(entry.name,companyPhotoCache.get(Number(entry.user_id))?.photo)}</a><div>${memberLink(entry.user_id,entry.name)}<p>${availabilitySummary(entry)}</p><a class="action company-offer" href="#offer/${Number(entry.user_id)}">${t("suggestMeetup")}</a></div>
+      </li>`).join("")}</ul>${!all&&current.length>3?`<div class="company-pagination"><small class="muted">${t("companyBatch")} ${companyOffset+1}–${companyOffset+selected.length} / ${current.length}</small>${action(t("nextCompany"),"data-next-company")}</div>`:""}${!all?link("allAvailable","#company"):""}`:!own?`<p class="muted">${t("todayEmpty")}</p>`:""}`;
+}
+async function refreshCompanyPhotos() {
+  if(demo||!user)return;
+  const owner=user.id,revision=availabilityRevision,tasks=[];
+  const ids=[...new Set([...document.querySelectorAll("[data-company-photo]")].map(node=>Number(node.dataset.companyPhoto)))];
+  for(const id of ids) {
+    if(!availability.some(entry=>Number(entry.user_id)===id&&availableToday(entry))||companyPhotoLoads.has(id)||Date.now()-(companyPhotoCache.get(id)?.checked||0)<120000)continue;
+    const task=api("/members/photo",{id}).then(result=>{
+      if(user?.id===owner&&availabilityRevision===revision)companyPhotoCache.set(id,{photo:result.photo,checked:Date.now()});
+    }).catch(()=>{
+      if(user?.id===owner&&availabilityRevision===revision)companyPhotoCache.set(id,{photo:"",checked:Date.now()});
+    }).finally(()=>{if(companyPhotoLoads.get(id)===task)companyPhotoLoads.delete(id);});
+    companyPhotoLoads.set(id,task);tasks.push(task);
+  }
+  if(tasks.length){await Promise.allSettled(tasks);if(user?.id===owner&&availabilityRevision===revision)updateAvailabilityViews();}
+}
+function companyPage() {
+  return `<h1>${t("allAvailable")}</h1><div class="actions">${link(ownAvailability()?"editAvailability":"availableToday","#availability")}</div><section id="company-list">${todayCompany(true)}</section>`;
+}
+function offerPage(peer) {
+  const person=availability.find(entry=>Number(entry.user_id)===peer&&availableToday(entry));
+  const start=person?Math.ceil(Math.max(Date.now()+60000,Date.parse(person.from))/60000)*60000:0;
+  if(!person||peer===user.id||start>=Date.parse(person.until))return `<h1>${t("suggestMeetup")}</h1><p>${t("availabilityEnded")}</p>${link("allAvailable","#company")}`;
+  return `<h1>${t("suggestMeetup")}</h1><p>${memberLink(peer,person.name)}</p><p>${availabilitySummary(person)}</p><p class="muted">${t("offerHelp")}</p>
+    <form data-form="availability-offer" data-peer="${peer}">${select("activity","activity",["fika","walk","food","other"].map(key=>[key,t(key)]),person.activity)}
+    ${field("start","start",localDate(new Date(start)),"datetime-local",`required min="${localDate(new Date(start))}" max="${localDate(new Date(Date.parse(person.until)-60000))}"`)}
+    ${field("place","place","","text",'required maxlength="180"')}${textArea("message","note","",'maxlength="700"')}<button class="primary">${t("send")}</button></form>`;
 }
 function availabilityPage() {
   const own=ownAvailability();
@@ -1176,6 +1213,7 @@ function memberPage(id) {
   if(!member)return `<h1>${t("memberProfile")}</h1>`;
   const organized=(member.meetups||[]).filter(e=>e.organized),participating=(member.meetups||[]).filter(e=>!e.organized);
   return `<section class="member-heading">${avatar(member.name,member.photo)}<h1>${esc(member.name)}${availabilityIndicator(id)}</h1>
+    ${user.id!==id&&availability.some(entry=>Number(entry.user_id)===id&&availableToday(entry))?link("suggestMeetup",`#offer/${id}`,"primary"):""}
     ${user.id!==id?`<a class="action primary" href="#messages/${Number(id)}">${icon("message")}${t("message")}</a>${member.canMessage===false?`<p class="muted contact-rule">${t("contactRule")}</p>`:""}`:""}</section>
     <section class="card">${member.bio?`<h2>${t("bio")}</h2><p>${esc(member.bio)}</p>`:""}
     <h2>${t("spokenLanguages")}</h2><p>${esc(member.languages)||t("none")}</p>
@@ -1185,7 +1223,7 @@ function memberPage(id) {
     ${safetyActions(id,"person",id)}`;
 }
 function photoEditor() {
-  return `<h2>${t("profilePhoto")}</h2><p><strong>${esc(user.name)}</strong>${availabilityIndicator(user.id)}</p><div class="photo-editor-row">${avatar(user.name,user.photo)}<div><label class="photo-choose">${t("changePhoto")}<input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp"></label>${user.photo?action(t("removePhoto"),"data-remove-photo","danger"):""}</div></div><p class="muted">${t("photoHelp")}</p>`;
+  return `<h2>${t("profilePhoto")}</h2><p><strong>${esc(user.name)}</strong>${availabilityIndicator(user.id)}</p><div class="photo-editor-row">${avatar(user.name,user.photo)}<div><label class="photo-choose">${t("changePhoto")}<input id="profile-photo-input" type="file" accept="image/jpeg,image/png,image/webp"></label><label class="photo-choose camera-choose">${icon("camera")}${t("takePhoto")}<input id="profile-camera-input" type="file" accept="image/jpeg,image/png,image/webp" capture="user"></label>${user.photo?action(t("removePhoto"),"data-remove-photo","danger"):""}</div></div><p class="muted">${t("photoHelp")}</p>`;
 }
 async function prepareProfilePhoto(file) {
   if(!file||!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)throw new Error("photoInvalid");
@@ -1203,8 +1241,8 @@ let photoBusy=false;
 async function saveProfilePhoto(file,remove=false) {
   if(photoBusy||!user)return;
   photoBusy=true;const owner=user.id;
-  const input=$("profile-photo-input"),button=document.querySelector("[data-remove-photo]");
-  if(input)input.disabled=true;if(button)button.disabled=true;
+  const input=$("profile-photo-input"),camera=$("profile-camera-input"),button=document.querySelector("[data-remove-photo]");
+  if(input)input.disabled=true;if(camera)camera.disabled=true;if(button)button.disabled=true;
   try {
     status("photoSaving");
     const photo=remove?"":await prepareProfilePhoto(file);
@@ -1215,7 +1253,7 @@ async function saveProfilePhoto(file,remove=false) {
     if(route()[0]==="profile"&&$("profile-photo-editor"))$("profile-photo-editor").innerHTML=photoEditor();
     status("photoSaved");
   } catch(error){if(user?.id===owner)status(error.message);}
-  finally {photoBusy=false;if(input){input.disabled=false;input.value="";}if(button)button.disabled=false;}
+  finally {photoBusy=false;if(input){input.disabled=false;input.value="";}if(camera){camera.disabled=false;camera.value="";}if(button)button.disabled=false;window.HangaAndroid?.clearCameraPhoto?.();}
 }
 
 function profilePage() {
@@ -1355,6 +1393,7 @@ function scrollChatToLatest() {
 function messagesPage(peer) {
   return `${peer?"":`<h1>${t("messages")}</h1>${messageNavigation("messages")}`}${demo?`<p class="muted">${t("messageDemo")}</p>`:""}
     <div class="chat-shell"><div id="chat-content">${chatContent(peer)}</div>
+    ${peer&&!canCompose(peer)&&chatThreads().get(peer)?.items.some(m=>m.availability_offer&&m.sender===user.id)?`<p class="muted">${t("offerPendingHelp")}</p>`:""}
     ${peer?`<form id="chat-compose" data-form="chat" data-peer="${peer}" ${canCompose(peer)?"":"hidden"}>
       <label class="sr-only" for="chat-body">${t("message")}</label><textarea id="chat-body" name="body" rows="2" placeholder="${t("chatPlaceholder")}" required maxlength="1500"></textarea><button class="primary" aria-label="${t("send")}" title="${t("send")}">➤</button></form>`:""}</div>`;
 }
@@ -1501,6 +1540,9 @@ document.addEventListener("submit",async event=>{
       if (!Number.isInteger(minutes) || minutes<0 || minutes>10080) throw new Error("invalid");
       localStorage.setItem(reminderKey(e.id),String(minutes));
       syncReminders();
+    } else if(mode==="availability-offer") {
+      await api("/availability/offer",{peer:Number(form.dataset.peer),activity:data.activity,start:stockholmDate(data.start),place:data.place,note:data.note,lang});
+      location.hash="messages/"+Number(form.dataset.peer);
     } else if(mode==="availability") {
       await saveAvailability(data);
       return;
@@ -1773,7 +1815,7 @@ document.addEventListener("click",async event=>{
   finally { button.disabled=false; }
 });
 document.addEventListener("change",event=>{
-  if(event.target.id==="profile-photo-input"&&event.target.files?.[0]){void saveProfilePhoto(event.target.files[0]);return;}
+  if(["profile-photo-input","profile-camera-input"].includes(event.target.id)&&event.target.files?.[0]){void saveProfilePhoto(event.target.files[0]);return;}
   const form=event.target.form;
   if(form?.dataset.form==="event") {
     if(event.target.name==="meetupMode") {

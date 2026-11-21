@@ -41,7 +41,7 @@ html = html.replace('<script src="app.js" defer></script>', "")
 html = html.replace("</body>", "<script>" + js + "</script></body>")
 Path(sys.argv[1]).write_text(html)
 PYTHON
-  sed '/android.permission.INTERNET/d; /android.permission.REQUEST_INSTALL_PACKAGES/d; /android.permission.BIND_JOB_SERVICE/d; s/android:label="Hänga Gbg"/android:label="Hänga Gbg Demo"/' \
+  sed '/android.permission.INTERNET/d; /android.permission.REQUEST_INSTALL_PACKAGES/d; /android.permission.BIND_JOB_SERVICE/d; s/android:label="Hänga Gbg"/android:label="Hänga Gbg Demo"/; s/[$]{applicationId}/se.hangagbg.android.demo/g' \
     app/src/main/AndroidManifest.xml > "$manifest"
   package_id=se.hangagbg.android.demo
   apk_name=Hanga-Gbg-Demo.apk

@@ -634,3 +634,44 @@ test('member event lists expose organized and joined meetups without saved, priv
   await call('block_person',{id:people[1].id,enabled:true},2);
   await assert.rejects(call('member_profile',{id:people[1].id},2),{message:'missing'});
 });
+
+test('any registered member can view available members and photos and send one private meetup suggestion',async()=>{
+  const {call,db,people}=await app();const {jpeg}=await import('./fixtures/photo.mjs');
+  const from=new Date(Date.now()-60000).toISOString(),until=new Date(Date.now()+30*60000).toISOString();
+  // Time-independent fixture: the action validates the Stockholm day at request time.
+  db.put('availability',people[1].id,{user_id:people[1].id,from,until,area:'Tuve',activity:'walk'});
+  await call('profile_photo',{photo:jpeg},1);
+  assert.ok((await call('availability_list',{},2)).some(p=>p.user_id===people[1].id));
+  assert.equal((await call('member_photo',{id:people[1].id},2)).photo,jpeg);
+  assert.equal((await call('member_profile',{id:people[1].id},2)).email,undefined);
+  const offer={peer:people[1].id,activity:'fika',place:'Cafe in Tuve',start:new Date(Date.now()+5*60000).toISOString(),note:'Would you like coffee?',lang:'en'};
+  const sent=await call('availability_offer',offer,2);assert.equal(sent.pushChat.owner,people[1].id);
+  const inbox=await call('chat_inbox',{},1);assert.equal(inbox[0].availability_offer,true);assert.match(inbox[0].body,/Coffee/);
+  await assert.rejects(call('availability_offer',offer,2),{message:'offerPending'});
+  await assert.rejects(call('chat_send',{peer:people[1].id,body:'Another message'},2),{message:'forbidden'});
+  assert.equal((await call('chat_peer',{peer:people[2].id},1)).canSend,true);
+  await call('chat_send',{peer:people[2].id,body:'Yes, thank you'},1);
+  assert.equal((await call('chat_peer',{peer:people[1].id},2)).canSend,true);
+  await call('chat_send',{peer:people[1].id,body:'Great'},2);
+  await call('availability_save',{enabled:false},1);
+  await call('chat_send',{peer:people[2].id,body:'See you'},1);
+  await call('block_person',{id:people[2].id,enabled:true},1);
+  await assert.rejects(call('member_photo',{id:people[1].id},2),{message:'missing'});
+  await assert.rejects(call('chat_send',{peer:people[1].id,body:'Blocked'},2),{message:'messageBlocked'});
+});
+
+test('suggestions reject stale availability, invalid times, blocked peers and forged contact flags',async()=>{
+  const {call,db,people}=await app();
+  const row={user_id:people[1].id,area:'Tuve',activity:'walk',from:new Date(Date.now()-60000).toISOString(),until:new Date(Date.now()+30*60000).toISOString()};
+  const offer={peer:people[1].id,activity:'walk',place:'Park',start:new Date(Date.now()+5*60000).toISOString()};
+  await assert.rejects(call('availability_offer',offer,null),{message:'loginRequired'});
+  await assert.rejects(call('availability_offer',offer,2),{message:'missing'});
+  db.put('availability',people[1].id,row);
+  for(const data of [{...offer,start:row.until},{...offer,start:new Date(Date.now()-1).toISOString()},{...offer,place:''},{...offer,activity:'invalid'}])await assert.rejects(call('availability_offer',data,2),{message:'invalid'});
+  await assert.rejects(call('chat_send',{peer:people[1].id,body:'Spoof',availability_offer:true},2),{message:'forbidden'});
+  db.put('availability',people[1].id,{...row,until:new Date(Date.now()-1).toISOString()});
+  await assert.rejects(call('availability_offer',offer,2),{message:'missing'});
+  db.put('availability',people[1].id,row);await call('block_person',{id:people[2].id,enabled:true},1);
+  await assert.rejects(call('availability_offer',offer,2),{message:'missing'});
+  assert.ok(!(await call('availability_list',{},2)).some(p=>p.user_id===people[1].id));
+});
