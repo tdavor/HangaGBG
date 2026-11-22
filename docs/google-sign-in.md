@@ -13,6 +13,10 @@ The app uses Android Credential Manager's Google button flow. Google authenticat
 5. Deploy the updated Worker from `backend/` before releasing the app: Google users must be allowed to reauthenticate for account deletion. Use your existing Cloudflare deployment configuration and secrets; no new server secret is required.
 6. Build the new APK/AAB and test a real Google account on a device with Google Play services. The offline demo has no Google sign-in.
 
+## Build verification
+
+The Play bundle workflow validates the Firebase project, Android app ID, Google Web OAuth client and the registered Play SHA-1 before packaging. It prints only a pass/fail summary and never the configuration or client secrets. This check is not a live sign-in test. Google provider enablement and a real-device sign-in must still be verified.
+
 ## Behaviour to check
 
 - Existing Firebase UID: the existing HängaGBG profile and history are reused.

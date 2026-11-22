@@ -1,13 +1,25 @@
-# Hänga Gbg 1.8.1 · Android
+# Hänga Gbg 1.8.3 · Android
 
-Version 1.8.1 adds a full available-members list, profile-photo thumbnails, private meetup suggestions for available users and a separate profile-camera button. Suggestions include activity, time and place; the recipient may reply, and the sender may continue once they do. This does not create a friendship or RSVP. Existing blocks remain enforced. Profile camera capture uses a private temporary image URI and the system camera without requesting the CAMERA permission. Backend deployment is required for photo lookup and suggestions.
+Google sign-in uses Android Credential Manager and Firebase. New members choose a unique name, neighbourhood and confirm age 18+. Setup: [Google sign-in configuration](docs/google-sign-in.md). Google sessions can delete their account by confirming the same Google account again.
+
+## Google Play (.aab)
+
+The `play` variant produces `HangaGBG-Play.aab`, signed with the existing protected upload keystore. It targets API 36, includes Firebase messaging and uses Google Play for updates; the GitHub APK updater and `REQUEST_INSTALL_PACKAGES` are absent from this variant. The `push` APK retains its GitHub update flow. The package name stays `se.hangagbg.android`.
+
+GitHub Actions → **Build signed Google Play bundle** → **HangaGBG-Google-Play** downloads a ZIP containing the signed AAB and a JSON with version, SHA-256 and the upload-certificate fingerprint. Extract it and upload the `.aab` to a testing track in Play Console. This builds a package; it does not publish it to Google Play. Future tagged releases also attach the AAB alongside the APK.
+
+The workflow reuses `HANGA_KEYSTORE_BASE64`, `HANGA_STOREPASS`, `HANGA_KEYPASS`, `HANGA_KEY_ALIAS` and `HANGA_GOOGLE_SERVICES_JSON`. The private key is decoded only in the temporary runner directory and deleted after the build; it is never an artifact. Local builds use `bash scripts/build-play-bundle.sh` with those signing environment variables and `app/google-services.json` already set. Use Gradle 8.11.1 and install Android SDK 36.
+
+Play App Signing separates the upload key from the key used to sign installed apps. When enrolling, choose your app-signing-key arrangement deliberately: a new Google-generated signing key will not let Play replace an existing GitHub-installed APK signed with a different certificate. This workflow does not export or change the app-signing key. Keep it secure and follow Play Console's enrollment steps.
+
+Version 1.8.3 adds a full available-members list, profile-photo thumbnails, private meetup suggestions for available users and a separate profile-camera button. Suggestions include activity, time and place; the recipient may reply, and the sender may continue once they do. This does not create a friendship or RSVP. Existing blocks remain enforced. Profile camera capture uses a private temporary image URI and the system camera without requesting the CAMERA permission. Backend deployment is required for photo lookup and suggestions.
 
 Company today in stable shuffled groups of up to three eligible members, with a Next 3 button and a position indicator. Availability dots beside member names mean available today, not online. They expire automatically using Stockholm dates and refresh without resetting forms.
 
 Public profiles support editable profile photos and public member profiles with a name, photo, languages, chat shortcut, organized meetups and joined meetups. Email stays out of the member API and public screen. Photos are resized/cropped on the device and stored as bounded JPEGs in a separate Firestore collection through the existing Worker; Firebase Storage and new Android permissions are not needed. Backend deployment is required before using the new APK.
 
 
-Version 1.8.1 refreshes the interface with a light Scandinavian palette, four bottom tabs, visible search, category chips, compact friend rows and contextual chat controls. The existing logo is preserved. Android startup shows the same icon artwork and the app name; it clears after two seconds, without waiting for Firebase. Event covers use category illustrations when no event photo is available.
+Version 1.8.3 refreshes the interface with a light Scandinavian palette, four bottom tabs, visible search, category chips, compact friend rows and contextual chat controls. The existing logo is preserved. Android startup shows the same icon artwork and the app name; it clears after two seconds, without waiting for Firebase. Event covers use category illustrations when no event photo is available.
 
 [**Ladda ner / Download Hänga Gbg för Android (.apk)**](https://github.com/tdavor/HangaGBG/releases/latest/download/HangaGBG.apk)
 
