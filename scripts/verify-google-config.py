@@ -26,7 +26,13 @@ def validate(config):
 if __name__ == '__main__':
     try:
         validate(json.loads(Path(sys.argv[1]).read_text()))
-    except (AssertionError, OSError, ValueError, IndexError, TypeError, KeyError) as error:
-        print('Google sign-in configuration check failed:', str(error) if isinstance(error, AssertionError) else 'Invalid or missing configuration file')
+    except json.JSONDecodeError as error:
+        print(f'Google sign-in configuration check failed: secret is not valid JSON (line {error.lineno}, column {error.colno}). Paste the complete google-services.json file contents into HANGA_GOOGLE_SERVICES_JSON, not its filename or path.')
+        sys.exit(1)
+    except AssertionError as error:
+        print('Google sign-in configuration check failed:', str(error))
+        sys.exit(1)
+    except (OSError, ValueError, IndexError, TypeError, KeyError, AttributeError):
+        print('Google sign-in configuration check failed: missing file or unexpected configuration structure. Download the Android google-services.json again.')
         sys.exit(1)
     print('Google sign-in configuration verified: project, Android app, Web OAuth and Play signing certificate.')
