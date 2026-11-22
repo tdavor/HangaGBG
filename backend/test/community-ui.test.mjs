@@ -347,3 +347,18 @@ test('late company photo responses do not leak images across accounts',async()=>
   await pending;
   assert.equal(run('companyPhotoCache.size'),0);
 });
+
+test('Google sign-in keeps first-profile consent and Google account deletion accessible',()=>{
+  const run=ui();
+  run('user=null;window.HangaAndroid={googleSignInAvailable:()=>true};hangaCloud.needsGoogleProfile=false');
+  assert.match(run('authPage("login")'),/data-google-login/);
+  assert.match(run('authPage("register")'),/data-google-login/);
+  run('hangaCloud.needsGoogleProfile=true');
+  const onboarding=run('authPage("google")');
+  assert.match(onboarding,/name="name"/);assert.match(onboarding,/name="adult" type="checkbox" required/);
+  assert.doesNotMatch(onboarding,/type="password"/);
+  run('user={id:1,name:"Anna",email:"private@example.test"};hangaCloud.googleAccount=true');
+  const profile=run('profilePage()');
+  assert.match(profile,/Google/);assert.match(profile,/data-form="deleteAccount"/);
+  assert.doesNotMatch(profile,/type="password"/);assert.match(profile,/required readonly/);
+});

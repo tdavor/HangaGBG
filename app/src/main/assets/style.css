@@ -136,3 +136,5 @@ button:hover,a.action:hover{background:#edf2e6}.primary,a.action.primary{backgro
 .company-all{flex-wrap:wrap}.company-all li{flex-basis:calc((100% - 1.2rem)/3)}
 
 .company-offer{font-size:.7rem;padding:.35rem .45rem!important;margin-top:.45rem;min-height:40px!important;width:100%}.company-all li{flex-direction:row;flex-basis:100%;align-items:center}.company-all li>div{flex:1}.company-all .company-offer{width:auto}.camera-choose{display:flex;gap:.4rem;align-items:center;border:1px solid var(--line);border-radius:12px;min-height:44px;padding:.5rem;position:relative;cursor:pointer}.camera-choose input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}.camera-choose:focus-within{outline:2px solid var(--green)}
+
+.google-login{background:#fff;color:#1f1f1f;border:1px solid #747775;border-radius:24px;font-weight:600;min-height:44px;padding:10px 24px}

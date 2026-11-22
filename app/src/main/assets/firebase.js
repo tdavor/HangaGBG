@@ -10,12 +10,17 @@ const hangaCloud = (() => {
   let config = stored(connectionKey) || {url:initial.url||"",key:initial.key||""};
   let credentials = stored(authKey);
   let refreshRequest;
+  let googleRequest;
   let revision = 0;
   localStorage.removeItem("hangaConnection");
   localStorage.removeItem("hangaAuth");
 
   function forget() {
     revision++;
+    if(googleRequest){
+      clearTimeout(googleRequest.timer);
+      googleRequest.reject(new Error("googleCancelled"));googleRequest=null;
+    }
     credentials = null;
     refreshRequest = null;
     localStorage.removeItem(authKey);
@@ -24,11 +29,13 @@ const hangaCloud = (() => {
     const access = result.idToken || result.id_token;
     const refresh = result.refreshToken || result.refresh_token;
     if (!access || !refresh) throw new Error("badLogin");
-    credentials = {access,refresh,ready,expires:Date.now()+1000*Number(result.expiresIn||result.expires_in||3600)};
+    credentials = {access,refresh,ready,provider:result.providerId||credentials?.provider||"password",uid:result.localId||credentials?.uid,expires:Date.now()+1000*Number(result.expiresIn||result.expires_in||3600)};
     localStorage.setItem(authKey,JSON.stringify(credentials));
   }
   const messages = {
-    INVALID_LOGIN_CREDENTIALS:"badLogin",INVALID_PASSWORD:"badLogin",EMAIL_NOT_FOUND:"badLogin",
+    INVALID_LOGIN_CREDENTIALS:"badLogin",
+    INVALID_IDP_RESPONSE:"googleFailed",FEDERATED_USER_ID_ALREADY_LINKED:"googleAccountExists",
+    ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL:"googleAccountExists",INVALID_PASSWORD:"badLogin",EMAIL_NOT_FOUND:"badLogin",
     USER_DISABLED:"blocked",EMAIL_EXISTS:"emailUsed",WEAK_PASSWORD:"password",TOO_MANY_ATTEMPTS_TRY_LATER:"mailRate",
     INVALID_REFRESH_TOKEN:"loginRequired",TOKEN_EXPIRED:"loginRequired",INVALID_ID_TOKEN:"loginRequired",
     PASSWORD_DOES_NOT_MEET_REQUIREMENTS:"password",USER_NOT_FOUND:"loginRequired",CREDENTIAL_TOO_OLD_LOGIN_AGAIN:"reauth",OPERATION_NOT_ALLOWED:"schemaMissing"
@@ -92,13 +99,84 @@ const hangaCloud = (() => {
     return refreshRequest;
   }
 
+  function googleToken() {
+    if (!window.HangaAndroid?.googleSignInAvailable?.()) return Promise.reject(new Error("googleSetup"));
+    if (googleRequest) return Promise.reject(new Error("googleBusy"));
+    return new Promise((resolve,reject)=>{
+      const id=crypto.randomUUID().replaceAll("-","");
+      const timer=setTimeout(()=>{
+        if(googleRequest?.id!==id)return;
+        googleRequest=null;reject(new Error("googleCancelled"));
+        window.HangaAndroid.googleSignOut?.();
+      },120000);
+      googleRequest={id,resolve,reject,timer};
+      try {window.HangaAndroid.googleSignIn(id);}
+      catch {clearTimeout(timer);googleRequest=null;reject(new Error("googleFailed"));}
+    });
+  }
+  window.hangaGoogleResult=(id,token,error)=>{
+    const request=googleRequest;
+    if(!request || request.id!==id)return;
+    googleRequest=null;clearTimeout(request.timer);
+    if(error || !token) request.reject(new Error(error||"googleFailed"));
+    else request.resolve(token);
+  };
+  async function googleSignIn(expectedUid) {
+    const current=revision;
+    const token=await googleToken();
+    if(revision!==current)throw new Error("loginRequired");
+    const result=await auth("signInWithIdp",{
+      postBody:new URLSearchParams({id_token:token,providerId:"google.com"}).toString(),
+      requestUri:"http://localhost",returnSecureToken:true,returnIdpCredential:true
+    }).catch(error=>{if(error.providerCode==="OPERATION_NOT_ALLOWED")throw new Error("googleSetup");throw error;});
+    if(revision!==current)throw new Error("loginRequired");
+    if(result.needConfirmation)throw new Error("googleAccountExists");
+    if(expectedUid && result.localId!==expectedUid)throw new Error("googleWrongAccount");
+    if(!result.localId || !result.idToken || !result.refreshToken)throw new Error("googleFailed");
+    return {...result,providerId:"google.com"};
+  }
+  async function reauthenticate(email,password) {
+    if(credentials?.provider!=="google.com")return signIn(email,password);
+    // A fresh Google account choice must resolve to the same Firebase user.
+    const lookup=await auth("lookup",{idToken:await accessToken()});
+    const uid=lookup.users?.[0]?.localId;
+    if(!uid)throw new Error("loginRequired");
+    return googleSignIn(uid);
+  }
+
   async function request(path,data) {
+    if(path==="/google/login") {
+      const current=revision;
+      const result=await googleSignIn();
+      try {
+        const profile=await rpc("me",{},result.idToken);
+        if(revision!==current)throw new Error("loginRequired");
+        save(result,true);
+        return {token:"firebase",user:profile};
+      } catch(error) {
+        if(error.message!=="loginRequired" || revision!==current)throw error;
+        save(result,false);
+        return {onboarding:true};
+      }
+    }
+    if(path==="/google/complete") {
+      const current=revision;
+      if(credentials?.provider!=="google.com" || credentials.ready)throw new Error("loginRequired");
+      if(!data.adult)throw new Error("adult");
+      const access=await accessToken();
+      await rpc("onboard",{name:data.name,area:data.area,languages:data.languages,adult:true},access);
+      const profile=await rpc("me",{},access);
+      if(revision!==current || !credentials)throw new Error("loginRequired");
+      credentials.ready=true;
+      localStorage.setItem(authKey,JSON.stringify(credentials));
+      return {token:"firebase",user:profile};
+    }
     if (path==="/register") {
       if (!data.adult) throw new Error("adult");
       if (!(await rpc("registration")).registration) throw new Error("closed");
       const email=data.email.trim().toLowerCase();
       if (!data.name.trim() || data.name.trim().length>80) throw new Error("invalid");
-      const result=await auth("signUp",{email,password:data.password,returnSecureToken:true});
+      const result={...await auth("signUp",{email,password:data.password,returnSecureToken:true}),providerId:"password"};
       try {
         await rpc("onboard",{name:data.name,area:data.area,languages:data.languages,adult:true},result.idToken);
       } catch (error) {
@@ -111,7 +189,7 @@ const hangaCloud = (() => {
     }
     if (path==="/login") {
       const email=data.email.trim().toLowerCase();
-      const result=await signIn(email,data.password);
+      const result={...await signIn(email,data.password),providerId:"password"};
       try {
         const profile=await rpc("me",{},result.idToken);
         save(result,true);
@@ -135,14 +213,17 @@ const hangaCloud = (() => {
       if (!access) throw new Error("loginRequired");
       return verifyEmail(access);
     }
-    if (path==="/logout") { forget(); return {}; }
+    if (path==="/logout") {
+      forget();window.HangaAndroid?.googleSignOut?.();return {};
+    }
     const access=credentials?.ready ? await accessToken() : undefined;
     if (path==="/me" && data) {
       const profile=await rpc("me",{},access);
       const email=data.email.trim().toLowerCase();
       let active=access;
       if (email!==profile.email || data.newPassword) {
-        const verified=await signIn(profile.email,data.current);
+        if(credentials?.provider==="google.com" && (email!==profile.email || data.newPassword))throw new Error("googleManageAccount");
+        const verified=await reauthenticate(profile.email,data.current);
         save(verified,true);
         active=verified.idToken;
         if (data.newPassword) {
@@ -160,9 +241,9 @@ const hangaCloud = (() => {
       return {...updated,emailPending:updated.email!==email};
     }
     if (path==="/account/delete") {
-      const verified=await signIn(data.email,data.password);
+      const verified=await reauthenticate(data.email,data.password);
       await rpc("delete_account",{},verified.idToken);
-      forget();
+      forget();window.HangaAndroid?.googleSignOut?.();
       return {};
     }
     const routes={"/members/photo":"member_photo","/availability/offer":"availability_offer","/me/photo":"profile_photo","/friends":"friend_list","/friends/status":"friend_status","/friends/request":"friend_request","/friends/reply":"friend_reply","/friends/remove":"friend_remove","/friends/invite":"friend_invite","/chats/peer":"chat_peer","/interest":"interest","/proposals/confirm":"proposal_confirm","/again":"again_list","/again/change":"again_change","/availability":data?"availability_save":"availability_list","/follows":data?"follow_change":"follow_list",
@@ -193,5 +274,5 @@ const hangaCloud = (() => {
     config=next;
     localStorage.setItem(connectionKey,JSON.stringify(next));
   }
-  return {request,connect,forget,get configuration(){return config;},get signedIn(){return credentials?.ready===true;}};
+  return {request,connect,forget,get configuration(){return config;},get signedIn(){return credentials?.ready===true;},get googleAccount(){return credentials?.provider==="google.com";},get needsGoogleProfile(){return credentials?.provider==="google.com" && !credentials.ready;}};
 })();

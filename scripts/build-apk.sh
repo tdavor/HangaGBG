@@ -47,11 +47,11 @@ PYTHON
   apk_name=Hanga-Gbg-Demo.apk
 "$tools/aapt2" compile --dir app/src/main/res -o "$out/resources.zip"
 "$tools/aapt2" link -I "$platform" --manifest "$manifest" \
-  --rename-manifest-package "$package_id" --version-code 31 --version-name 1.8.1 \
+  --rename-manifest-package "$package_id" --version-code 33 --version-name 1.8.3 \
   --min-sdk-version 26 --target-sdk-version 35 -A "$assets" --java "$out/generated" --custom-package se.hangagbg.android \
   -o "$out/package.apk" "$out/resources.zip"
 java -m jdk.compiler/com.sun.tools.javac.Main -source 17 -target 17 -classpath "$platform" \
-  -d "$out/classes" app/src/main/java/se/hangagbg/android/*.java "$out/generated/se/hangagbg/android/R.java"
+  -d "$out/classes" app/src/main/java/se/hangagbg/android/*.java app/src/play/java/se/hangagbg/android/AppUpdate.java "$out/generated/se/hangagbg/android/R.java"
 # Package the compiled classes for D8 without depending on a separate jar executable.
 (cd "$out/classes" && zip -q -r "$out/classes.zip" .)
 "$tools/d8" --min-api 26 --lib "$platform" --output "$out/dex" "$out/classes.zip"
