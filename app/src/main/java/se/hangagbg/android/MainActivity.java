@@ -41,10 +41,12 @@ public final class MainActivity extends Activity {
     private LinearLayout splash;
     private boolean webReady;
     private AppUpdate appUpdate;
+    private GoogleLogin googleLogin;
     private static final int NOTIFICATION_PERMISSION = 12;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        googleLogin=GoogleLogin.create(this);
         if (!getPackageName().endsWith(".demo")) appUpdate = new AppUpdate(this);
         web = new WebView(this);
         web.setBackgroundColor(0xfffbf8f2);
@@ -300,11 +302,29 @@ public final class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         if(photoPicker!=null){photoPicker.onReceiveValue(null);photoPicker=null;}
+        if (googleLogin != null) googleLogin.cancel();
         if (appUpdate != null) appUpdate.destroy();
         super.onDestroy();
     }
 
     private final class AppActions {
+        @JavascriptInterface public boolean googleSignInAvailable() { return googleLogin!=null; }
+        @JavascriptInterface public void googleSignOut() {
+            runOnUiThread(() -> {if(googleLogin!=null)googleLogin.signOut();});
+        }
+        @JavascriptInterface public void googleSignIn(String requestId) {
+            if(requestId==null || !requestId.matches("[a-zA-Z0-9_-]{16,80}"))return;
+            runOnUiThread(() -> {
+                if(web==null || web.getUrl()==null || !web.getUrl().startsWith("https://"+HOST+"/"))return;
+                GoogleLogin.Callback callback=(token,error)-> {
+                    if(isFinishing() || isDestroyed())return;
+                    web.evaluateJavascript("window.hangaGoogleResult?.("+org.json.JSONObject.quote(requestId)+","+
+                        org.json.JSONObject.quote(token)+","+org.json.JSONObject.quote(error)+")",null);
+                };
+                if(googleLogin==null)callback.complete("","googleSetup");else googleLogin.start(callback);
+            });
+        }
+
         @JavascriptInterface public void clearCameraPhoto() {
             runOnUiThread(() -> ProfilePhotoProvider.photoFile(MainActivity.this).delete());
         }

@@ -675,3 +675,14 @@ test('suggestions reject stale availability, invalid times, blocked peers and fo
   await assert.rejects(call('availability_offer',offer,2),{message:'missing'});
   assert.ok(!(await call('availability_list',{},2)).some(p=>p.user_id===people[1].id));
 });
+
+test('Google account deletion needs a recent verified provider session',async()=>{
+  const {call,users}=await app();
+  users[0].provider='google.com';users[0].authTime=Math.floor(Date.now()/1000)-300;
+  await assert.rejects(call('delete_account'),{message:'reauth'});
+  users[0].authTime=undefined;
+  await assert.rejects(call('delete_account'),{message:'reauth'});
+  users[0].authTime=Math.floor(Date.now()/1000);
+  const result=await call('delete_account');
+  assert.equal(result.deleteAuth,users[0].uid);
+});

@@ -184,7 +184,7 @@ export async function action(db, name, p, identity, env) {
     return {...publicProfile(profile),newRegistration:true};
   }
   if (me?.deleted && me.uid===identity.uid && name==="delete_account" &&
-      identity.provider==="password" && Date.now()/1000-identity.authTime<=120) {
+      ["password","google.com"].includes(identity.provider) && Number.isFinite(identity.authTime) && Date.now()/1000-identity.authTime>=0 && Date.now()/1000-identity.authTime<=120) {
     return {deleteAuth:me.uid,profileId:me.id};
   }
   if (!me || me.deleted) fail("loginRequired");
@@ -321,7 +321,7 @@ export async function action(db, name, p, identity, env) {
   }
   if (["delete_account","admin_delete","admin_block"].includes(name)) {
     if (name!=="delete_account" && !me.admin) fail("forbidden");
-    if (name==="delete_account" && (identity.provider!=="password" || Date.now()/1000-identity.authTime>120)) fail("reauth");
+    if (name==="delete_account" && (!["password","google.com"].includes(identity.provider) || !Number.isFinite(identity.authTime) || Date.now()/1000-identity.authTime<0 || Date.now()/1000-identity.authTime>120)) fail("reauth");
     const target = name==="delete_account" ? me : await db.get("profiles",integer(p.id));
     if (!target || (name!=="delete_account" && (target.id===uid || target.uid===env.ADMIN_UID))) fail("forbidden");
     if (target.deleted) {

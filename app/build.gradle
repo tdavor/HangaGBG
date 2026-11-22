@@ -10,8 +10,8 @@ android {
         applicationId 'se.hangagbg.android'
         minSdk 26
         targetSdk 35
-        versionCode 31
-        versionName '1.8.1'
+        versionCode 33
+        versionName '1.8.3'
     }
     flavorDimensions += 'delivery'
     productFlavors {
@@ -23,4 +23,9 @@ android {
     }
 }
 
-dependencies { pushImplementation "com.google.firebase:firebase-messaging:25.0.1" }
+dependencies {
+    pushImplementation "com.google.firebase:firebase-messaging:25.0.1"
+    pushImplementation "androidx.credentials:credentials:1.3.0"
+    pushImplementation "androidx.credentials:credentials-play-services-auth:1.3.0"
+    pushImplementation "com.google.android.libraries.identity.googleid:googleid:1.1.1"
+}

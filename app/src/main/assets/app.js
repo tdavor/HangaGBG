@@ -1,6 +1,16 @@
 "use strict";
 
 const copy = {
+  googleLogin:["Fortsätt med Google","Continue with Google"], googleComplete:["Slutför din profil","Complete your profile"],
+  googleProfileHelp:["Välj ett ledigt namn och ditt område. Din e-post visas inte för andra medlemmar.","Choose an available name and your area. Your email stays hidden from other members."],
+  googleSetup:["Google-inloggning är inte aktiverad för den här appversionen. Använd e-post eller kontakta support.","Google sign-in is not configured for this app version. Use email or contact support."],
+  googleFailed:["Google-inloggningen misslyckades. Försök igen eller använd e-post.","Google sign-in failed. Try again or use email."],
+  googleCancelled:["Google-inloggningen avbröts.","Google sign-in was cancelled."], googleBusy:["Google-inloggning pågår redan.","Google sign-in is already in progress."],
+  googleWrongAccount:["Välj samma Google-konto som du är inloggad med i HängaGBG.","Choose the same Google account you use in HängaGBG."],
+  googleAccountExists:["Adressen har redan ett konto. Logga in med din tidigare metod. Kontakta support om du behöver hjälp att koppla kontona.","This email already has an account. Sign in using your original method. Contact support for help linking accounts."],
+  googleManageAccount:["E-post och lösenord för ditt Google-konto hanteras hos Google.","Your Google account email and password are managed by Google."],
+  googleDeleteHelp:["Bekräfta med ditt Google-konto i nästa steg för att radera kontot och dina uppgifter.","Confirm with your Google account in the next step to delete your account and data."],
+
   company:["Tillgängliga idag","Available today"], offer:["Föreslå en träff","Suggest a meetup"],
   suggestMeetup:["Föreslå en träff","Suggest a meetup"], allAvailable:["Alla tillgängliga idag","Everyone available today"], offerHelp:["Skicka ett privat förslag inom personens angivna tid. Mottagaren kan svara i chatten. Ingen vänskap eller anmälan skapas automatiskt.","Send a private suggestion within the person's available time. They can reply in chat. No friendship or event registration is created automatically."], offerPending:["Du har redan skickat ett förslag för den här tillgängligheten.","You have already sent a suggestion for this availability."], offerPendingHelp:["Ditt förslag är skickat. Du kan fortsätta skriva när mottagaren har svarat.","Your suggestion has been sent. You can continue messaging once the recipient replies."], availabilityChatHelp:["Ni kan svara privat på förslaget här.","You can discuss the suggestion privately here."], availabilityEnded:["Tillgängligheten har upphört eller tiden räcker inte längre för ett nytt förslag.","This availability has ended or there is no longer enough time for a new suggestion."], takePhoto:["Ta en bild","Take a photo"],
 
@@ -720,6 +730,13 @@ function authPage(mode) {
   if (user) return `<h1>${t("profile")}</h1>${link("profile","#profile","primary")}`;
   if (demo) return `<h1>${t("login")}</h1><p>${t("demoBanner")}</p>${action(t("demo"),"data-demo","primary")}`;
   if (!base) return `<h1>${t("login")}</h1><p>${t("setup")}</p>${link("connect","#connect","primary")}`;
+  if(mode==="google" && hangaCloud.needsGoogleProfile) return `<h1>${t("googleComplete")}</h1><p>${t("googleProfileHelp")}</p>
+    <form data-form="googleProfile">
+      ${field("name","name","","text",'required maxlength="80"')}${areaSelect()}
+      ${field("spokenLanguages","languages","","text",'maxlength="150"')}
+      <label class="check"><input name="adult" type="checkbox" required> ${t("adultLabel")}</label>
+      <button class="primary">${t("save")}</button>
+    </form>${action(t("logout"),"data-logout")}`;
   if (mode==="reset") return `<h1>${t("resetPassword")}</h1><p>${t("resetHelp")}</p>
     <form data-form="reset">
       ${field("email","email",pendingEmail,"email",'required autocomplete="email"')}
@@ -729,7 +746,10 @@ function authPage(mode) {
     <div class="actions">${link("login","#auth","primary")}</div>`;
   if (mode==="confirm") return `<h1>${t("verify")}</h1><p>${t("confirmEmail")}</p>
     <div class="actions">${action(t("resend"),"data-resend")} ${link("login","#auth","primary")}</div>`;
-  return `<h1>${t(register?"register":"login")}</h1><form data-form="${register?"register":"login"}">
+  return `<h1>${t(register?"register":"login")}</h1>
+    ${!demo&&window.HangaAndroid?.googleSignInAvailable?.()?`<div class="actions">${action(t("googleLogin"),"data-google-login","google-login")}</div>`:""}
+    ${hangaCloud.needsGoogleProfile?link("googleComplete","#auth/google"):""}
+    <form data-form="${register?"register":"login"}">
     ${register?field("name","name","","text",'required maxlength="80"')+areaSelect()+field("spokenLanguages","languages","","text",'maxlength="150"'):""}
     ${field("email","email",pendingEmail,"email",'required autocomplete="email"')}
     ${passwordField("passwordLabel","password",{policy:register,hint:true,required:true,autocomplete:register?"new-password":"current-password"})}
@@ -1262,7 +1282,7 @@ function profilePage() {
     <details class="account-menu"><summary aria-label="${t("accountMenu")}"><span aria-hidden="true">☰</span></summary>
       <div class="account-menu-panel">
 
-        ${action(t("passwordLabel"),'data-account-section="profile-password"')}
+        ${!hangaCloud.googleAccount?action(t("passwordLabel"),'data-account-section="profile-password"'):""}
         ${blockedPeople.length?action(t("blockedPeople"),'data-account-section="profile-blocked"'):""}
         ${base?action(t("deleteAccount"),'data-account-section="profile-delete"',"danger"):""}
         ${action(t("logout"),"data-logout")}
@@ -1274,16 +1294,16 @@ function profilePage() {
     ${blockedPeople.length?`<details id="profile-blocked" hidden><summary>${t("blockedPeople")}</summary>${blockedPeople.map(p=>
       `<p>${esc(p.name)} ${action(t("unblockPerson"),`data-block-person="${Number(p.id)}" data-value="false"`)}</p>`).join("")}</details>`:""}
     <form data-form="profile">
-      ${field("name","name",user.name,"text",'required maxlength="80"')}${field("email","email",user.email,"email","required")}<small class="muted">${t("privateEmail")}</small>
+      ${field("name","name",user.name,"text",'required maxlength="80"')}${field("email","email",user.email,"email",hangaCloud.googleAccount?"required readonly":"required")}<small class="muted">${t("privateEmail")}</small>
       ${areaSelect(user.area)}${textArea("bio","bio",user.bio,'maxlength="1500"')}
       ${field("interests","interests",user.interests,"text",'maxlength="300"')}
       ${field("spokenLanguages","languages",user.languages,"text",'maxlength="150"')}
 
-      <details id="profile-password" hidden><summary>${t("passwordLabel")}</summary>${passwordField("current","current")}
-      ${passwordField("newPassword","newPassword",{policy:true,autocomplete:"new-password"})}</details>
+      ${hangaCloud.googleAccount?`<p class="muted">${t("googleManageAccount")}</p>`:`<details id="profile-password" hidden><summary>${t("passwordLabel")}</summary>${passwordField("current","current")}
+      ${passwordField("newPassword","newPassword",{policy:true,autocomplete:"new-password"})}</details>`}
       <button class="primary">${t("save")}</button></form>
       ${base?`<details id="profile-delete" hidden><summary class="danger">${t("deleteAccount")}</summary><form data-form="deleteAccount">
-        ${passwordField("current","password",{required:true})}<button class="danger">${t("deleteAccount")}</button>
+        ${hangaCloud.googleAccount?`<p>${t("googleDeleteHelp")}</p>`:passwordField("current","password",{required:true})}<button class="danger">${t("deleteAccount")}</button>
       </form></details>`:""}`;
 }
 function adminPage() {
@@ -1497,7 +1517,11 @@ document.addEventListener("submit",async event=>{
   const button=form.querySelector("button:not([type=button])");
   button.disabled=true;
   try {
-    if (mode==="connect") {
+    if(mode==="googleProfile") {
+      data.adult=data.adult==="on";
+      const response=await api("/google/complete",data);
+      session(response);location.hash="profile";
+    } else if (mode==="connect") {
       await disableAlerts();
       await hangaCloud.connect(data.url,data.key.trim());
       if (!hangaCloud.signedIn) session();
@@ -1737,7 +1761,11 @@ document.addEventListener("click",async event=>{
   }
   button.disabled=true;
   try {
-    if(d.addFriend||d.friendReply||d.removeFriend) {
+    if("googleLogin" in d) {
+      const response=await api("/google/login",{});
+      if(response.onboarding){location.hash="auth/google";return;}
+      session(response);location.hash="profile";
+    } else if(d.addFriend||d.friendReply||d.removeFriend) {
       if(d.addFriend) await api("/friends/request",{peer:Number(d.addFriend)});
       else if(d.friendReply) await api("/friends/reply",{peer:Number(d.friendReply),accept:d.accept==="true"});
       else {if(!d.withdraw&&!confirm(t("removeFriendConfirm")))return;await api("/friends/remove",{peer:Number(d.removeFriend)});}
