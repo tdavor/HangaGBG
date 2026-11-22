@@ -174,7 +174,7 @@ const copy = {
   joined:["har anmält sig","joined your meetup"], messageNotice:["skickade ett meddelande","sent a message"],
   invalid:["Kontrollera uppgifterna.","Check your entries."], network:["Servern kan inte nås.","The server is unreachable."],
   past:["Välj en tid i framtiden.","Choose a future date and time."], full:["Det finns inte tillräckligt med platser.","There aren’t enough spaces."],
-  password:["Minst 8 tecken och minst ett specialtecken, till exempel ! eller #.","At least 8 characters and one special character, such as ! or #."],
+  password:["Minst 8 tecken. Inga specialtecken krävs.","At least 8 characters. No special characters required."],
   adult:["Bekräfta att du är minst 18 år.","Confirm that you are at least 18."], closed:["Registreringen är stängd.","Registration is closed."],
   emailUsed:["E-postadressen används redan.","That email address is already in use."],
   forbidden:["Du saknar behörighet.","You don’t have permission."], loginRequired:["Logga in för att fortsätta.","Sign in to continue."],
@@ -307,15 +307,14 @@ const $ = id => document.getElementById(id);
 const action = (text, extra="", klass="") => `<button type="button" class="${klass}" ${extra}>${esc(text)}</button>`;
 const link = (key, url, klass="") => `<a class="action ${klass}" href="${esc(url)}">${esc(t(key))}</a>`;
 const field = (key, name, value="", type="text", attrs="") => `<label>${t(key)}<input name="${name}" type="${type}" value="${esc(value)}" ${attrs}></label>`;
-function passwordField(label,name,{policy=false,required=false,autocomplete="current-password"}={}) {
-  const hint=policy?`<small class="muted">${t("password")}</small>`:"";
-  return `<label>${t(label)}${hint}<span class="password-field">
-    <input name="${name}" type="password" autocomplete="${autocomplete}" ${required?"required":""} ${policy?'minlength="8" maxlength="72"':""}>
+function passwordField(label,name,{policy=false,hint=policy,required=false,autocomplete="current-password"}={}) {
+  const help=hint?`<small class="muted">${t("password")}</small>`:"";
+  return `<label>${t(label)}${help}<span class="password-field">
+    <input name="${name}" type="password" autocomplete="${autocomplete}" ${required?"required":""} ${policy?'minlength="8"':""}>
     <button type="button" data-password-toggle aria-pressed="false" aria-label="${t("passwordShow")}">👁</button>
   </span></label>`;
 }
-const passwordSymbols = "^$*.[]{}()?!@#%&/\\,><':;|_~" + '"';
-const passwordValid = value => value.length>=8 && [...value].some(char=>passwordSymbols.includes(char));
+const passwordValid = value => value.length>=8;
 const textArea = (key,name,value,attrs="") => `<label>${t(key)}<textarea name="${name}" ${attrs}>${esc(value)}</textarea></label>`;
 const option = (value,label,current) => `<option value="${esc(value)}" ${value===current?"selected":""}>${esc(label)}</option>`;
 const select = (label,name,choices,current) => `<label>${t(label)}<select name="${name}">${choices.map(([v,l])=>option(v,l,current)).join("")}</select></label>`;
@@ -733,7 +732,7 @@ function authPage(mode) {
   return `<h1>${t(register?"register":"login")}</h1><form data-form="${register?"register":"login"}">
     ${register?field("name","name","","text",'required maxlength="80"')+areaSelect()+field("spokenLanguages","languages","","text",'maxlength="150"'):""}
     ${field("email","email",pendingEmail,"email",'required autocomplete="email"')}
-    ${passwordField("passwordLabel","password",{policy:register,required:true,autocomplete:register?"new-password":"current-password"})}
+    ${passwordField("passwordLabel","password",{policy:register,hint:true,required:true,autocomplete:register?"new-password":"current-password"})}
     ${register?`<label class="check"><input name="adult" type="checkbox" required> ${t("adultLabel")}</label>`:""}
     <button class="primary">${t(register?"register":"login")}</button></form>
     <div class="actions">${register?"":action(t("forgotPassword"),"data-forgot-password")} ${link(register?"login":"register",register?"#auth":"#auth/register")}
