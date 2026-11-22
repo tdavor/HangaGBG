@@ -176,7 +176,7 @@ const hangaCloud = (() => {
       if (!(await rpc("registration")).registration) throw new Error("closed");
       const email=data.email.trim().toLowerCase();
       if (!data.name.trim() || data.name.trim().length>80) throw new Error("invalid");
-      const result=await auth("signUp",{email,password:data.password,returnSecureToken:true});
+      const result={...await auth("signUp",{email,password:data.password,returnSecureToken:true}),providerId:"password"};
       try {
         await rpc("onboard",{name:data.name,area:data.area,languages:data.languages,adult:true},result.idToken);
       } catch (error) {

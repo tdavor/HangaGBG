@@ -11,7 +11,7 @@ function client(handler,{account}={}) {
   const context={URL,URLSearchParams,AbortController,Date,crypto:webcrypto,setTimeout,clearTimeout,
     localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
     window:{HANGA_FIREBASE:{url:'https://example.workers.dev',key:'test'},HangaAndroid:{googleSignInAvailable:()=>true,googleSignIn(id){queueMicrotask(()=>context.window.hangaGoogleResult(id,'google-token',''));},googleSignOut(){}}},
-    async fetch(url,options){const body=JSON.parse(options.body);calls.push({url,body});const result=handler(url,body,calls);return {ok:!result.error,status:result.error?400:200,text:async()=>JSON.stringify(result)};}};
+    async fetch(url,options){const body=JSON.parse(options.body);calls.push({url,body});const result=await handler(url,body,calls);return {ok:!result.error,status:result.error?400:200,text:async()=>JSON.stringify(result)};}};
   vm.createContext(context);vm.runInContext(source,context);
   return {api:vm.runInContext('hangaCloud',context),calls,storage,context};
 }
@@ -63,4 +63,18 @@ test('cancelled and stale native replies never create a session',async()=>{
   });
   await assert.rejects(api.request('/google/login',{}),{message:'googleCancelled'});
   assert.equal(calls.length,0);assert.equal(api.signedIn,false);
+});
+
+test('logout while a Google profile is loading cannot restore the session',async()=>{
+  let release,entered;
+  const started=new Promise(r=>entered=r);
+  const pending=new Promise(r=>release=r);
+  const {api}=client(async(url,body)=>{
+    if(url.includes('signInWithIdp'))return authResult;
+    entered();await pending;return {id:42};
+  });
+  const login=api.request('/google/login',{});
+  await started;await api.request('/logout',{});release();
+  await assert.rejects(login,{message:'loginRequired'});
+  assert.equal(api.signedIn,false);assert.equal(api.needsGoogleProfile,false);
 });

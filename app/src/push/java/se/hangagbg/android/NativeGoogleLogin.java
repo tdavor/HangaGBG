@@ -35,7 +35,7 @@ public final class NativeGoogleLogin implements GoogleLogin {
             String nonce=java.util.UUID.randomUUID().toString()+java.util.UUID.randomUUID();
             var option=new GetSignInWithGoogleOption.Builder(client).setNonce(nonce).build();
             var request=new GetCredentialRequest.Builder().addCredentialOption(option).build();
-            manager.getCredentialAsync(activity,request,signal,activity.getMainExecutor(),
+            manager.getCredentialAsync(activity,request,signal,activity::runOnUiThread,
                 new CredentialManagerCallback<GetCredentialResponse,GetCredentialException>() {
                     @Override public void onResult(GetCredentialResponse result) {
                         if(pending!=signal)return;
@@ -60,7 +60,7 @@ public final class NativeGoogleLogin implements GoogleLogin {
     @Override public void cancel(){if(pending!=null){pending.cancel();pending=null;}}
     @Override public void signOut(){
         cancel();
-        manager.clearCredentialStateAsync(new ClearCredentialStateRequest(),null,activity.getMainExecutor(),
+        manager.clearCredentialStateAsync(new ClearCredentialStateRequest(),null,activity::runOnUiThread,
             new CredentialManagerCallback<Void,ClearCredentialException>() {
                 @Override public void onResult(Void result) {}
                 @Override public void onError(ClearCredentialException error) {}
