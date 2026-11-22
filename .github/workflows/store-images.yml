@@ -30,7 +30,7 @@ jobs:
             await page.addInitScript(()=>{localStorage.lang='sv';localStorage.hangaDemoToken='demo';});
             await page.goto('http://127.0.0.1:8767');
             await page.waitForTimeout(1000);
-            for(const [route,file] of [['discover','01-upptack'],['event/1','02-traff'],['create','03-skapa-traff']]){
+            for(const [route,file] of [['discover','01-upptack'],['event/1','02-traff'],['create','03-skapa-traff'],['discover','04-traffar']]){
               await page.goto('http://127.0.0.1:8767/#'+route);
               await page.waitForTimeout(700);
               await page.evaluate("if(user){user.admin=0;render();}window.scrollTo(0,0)");
@@ -38,6 +38,7 @@ jobs:
                 await page.locator('input[name="title"]').fill('Fika och nya vänner i Haga');
                 await page.locator('textarea[name="description"]').fill('Vill du ta en fika och lära känna nya människor? Vi ses i Haga. Du är varmt välkommen att komma själv!');
               }
+              if(file==='04-traffar') await page.locator('#results').scrollIntoViewIfNeeded();
               await page.screenshot({path:'store-images/'+file+'.png'});
               console.log(file,await page.locator('main').innerText().then(s=>s.slice(0,250)));
             }
