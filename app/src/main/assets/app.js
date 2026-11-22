@@ -131,7 +131,7 @@ const copy = {
   browseEvents:["Kommande träffar","Upcoming meetups"], searchFilters:["Sök och filtrera","Search and filter"],
   previous:["Föregående","Previous"], next:["Nästa","Next"], page:["Sida","Page"],
   simulateVacancy:["Simulera en ledig plats","Simulate an open spot"],
-  quick:["Sugen på att hänga?","Up for hanging out?"], quickBadge:["Spontant","Spontaneous"],
+  quick:["Snabbträff","Quick meetup"], createQuick:["Skapa en snabbträff","Create a quick meetup"], quickBadge:["Spontant","Spontaneous"],
   quickTime:["Välj en tid inom 24 timmar.","Choose a time within the next 24 hours."],
   newcomers:["Nya deltagare välkomna","First-timers welcome"], share:["Dela inbjudan","Share invitation"],
   shareFailed:["Kunde inte dela inbjudan.","Could not share invitation."],
@@ -701,7 +701,6 @@ function render() {
   else if (page==="messages") html=messagesPage(Number(id));
   else if (page==="notices") html=noticesPage();
   else html=discoverPage();
-  if(page==="create"&&!id&&user) html=`<div class="actions">${link("quick","#create/quick")}</div>`+html;
   $("main").innerHTML=html;
   if(["discover","company","availability"].includes(page))void refreshCompanyPhotos();
   if (page==="messages") scrollChatToLatest();
@@ -1179,11 +1178,18 @@ function eventPage(e, recipient) {
     ${manager?`<div class="card"><div class="actions">${e.cancelled?"":link("edit","#create/"+e.id)}${open?command("cancelEvent","cancel",true,"danger"):""}${command("deleteEvent","delete",true,"danger")}
        ${user.admin?command(e.hidden?"show":"hide","moderate",!e.hidden):""}</div></div>`:""}${user&&(manager||e.joined)?`<div class="card">${command("attendees","participants",true)}<div id="participants"></div></div>`:""}${form}${safetyActions(target,recipient?"person":"event",recipient?target:e.id)}`;
 }
+function quickMeetupSection() {
+  return `<section aria-labelledby="quick-meetup-heading">
+    <h2 id="quick-meetup-heading">${t("quick")}</h2>
+    <div class="actions">${link("createQuick","#create/quick")}</div>
+    ${walkPicker()}
+  </section><h2>${t("standardMeetup")}</h2>`;
+}
 function eventForm(e,draft,repeat,city) {
   const values=e||repeat|| (city&&{title:city.title,place:city.place,source:city.source,category:"other"});
   const cityStart=city?new Date(Math.max(Date.parse(city.start),Date.now()+60000)):null;
   if (e && e.owner!==user.id && !user.admin) return `<h1>${t("forbidden")}</h1>`;
-  return `<h1>${t(city?"arrangeCityMeetup":repeat?"repeat":e?"edit":"create")}</h1>${draft?`<p>${t("templateDate")}</p>`:""}${!e&&!city?walkPicker():""}${city?`<p>${t("cityMeetupHelp")}</p>`:""}<form data-form="event" data-id="${e?.id ? Number(e.id) : ""}">
+  return `<h1>${t(city?"arrangeCityMeetup":repeat?"repeat":e?"edit":"create")}</h1>${draft?`<p>${t("templateDate")}</p>`:""}${!e&&!draft&&!repeat&&!city?quickMeetupSection():""}${city?`<p>${t("cityMeetupHelp")}</p>`:""}<form data-form="event" data-id="${e?.id ? Number(e.id) : ""}">
     ${!demo&&!e?select("meetupMode","meetupMode",[["meetup",t("standardMeetup")],["idea",t("ideaMode")]],"meetup"):""}
     ${!demo&&!e?`<div id="proposal-options" hidden>${field("minPeople","minPeople",3,"number",'min="2" max="21" step="1" disabled')}<p class="muted">${t("proposalHelp")}</p></div>`:e?.minPeople?`<p>${t("minPeople")}: ${e.minPeople}</p><p class="muted">${t("proposalFixed")}</p>`:""}
     ${field("title","title",values?.title||draft?.title[lang==="en"?1:0],"text",'required maxlength="120"')}
