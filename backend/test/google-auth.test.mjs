@@ -78,3 +78,31 @@ test('logout while a Google profile is loading cannot restore the session',async
   await assert.rejects(login,{message:'loginRequired'});
   assert.equal(api.signedIn,false);assert.equal(api.needsGoogleProfile,false);
 });
+
+test('a second Google login cannot race while Firebase profile lookup is still running',async()=>{
+ let finish,entered;
+ const ready=new Promise(resolve=>entered=resolve),pending=new Promise(resolve=>finish=resolve);
+ const {api,calls}=client(async url=>{if(url.includes('signInWithIdp'))return authResult;entered();await pending;return {id:42,name:'Anna'};});
+ const first=api.request('/google/login',{});await ready;
+ await assert.rejects(api.request('/google/login',{}),{message:'googleBusy'});
+ assert.equal(calls.filter(c=>c.url.includes('signInWithIdp')).length,1);
+ finish();assert.equal((await first).user.id,42);assert.equal(api.signedIn,true);
+});
+test('failed Google profile lookup releases the operation lock for an explicit retry',async()=>{
+ let fail=true;
+ const {api}=client(url=>url.includes('signInWithIdp')?authResult:fail?{error:'server'}:{id:42});
+ await assert.rejects(api.request('/google/login',{}),{message:'server'});fail=false;
+ assert.equal((await api.request('/google/login',{})).user.id,42);
+});
+test('Google timeout cancels only the pending prompt, keeps an existing session and ignores late results',async()=>{
+ const {api,calls,context}=client(()=>authResult,{account:true});
+ let timeout,prompt,cancelled=0,signedOut=0;
+ context.setTimeout=(fn,ms)=>{assert.equal(ms,120000);timeout=fn;return 1;};context.clearTimeout=()=>{};
+ context.window.HangaAndroid.googleSignIn=id=>{prompt=id;};
+ context.window.HangaAndroid.googleCancel=()=>cancelled++;
+ context.window.HangaAndroid.googleSignOut=()=>signedOut++;
+ const login=api.request('/google/login',{});timeout();
+ await assert.rejects(login,{message:'googleTimeout'});
+ context.window.hangaGoogleResult(prompt,'late-token','');
+ assert.equal(cancelled,1);assert.equal(signedOut,0);assert.equal(calls.length,0);assert.equal(api.signedIn,true);
+});
