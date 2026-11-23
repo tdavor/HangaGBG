@@ -46,3 +46,22 @@ test('credential and rate-limit failures return safe codes and cache a backoff w
  await Promise.all(pending);assert.deepEqual(stored,[{data:{error:code},ttl:'public, max-age=300'}]);assert.doesNotMatch(JSON.stringify(stored),/secret-key|private upstream/);
  }
 });
+
+test('Tickster uses Workers-compatible manual redirects and never forwards credentials to a redirect destination',async()=>{
+ let calls=0;
+ const send=async(url,options)=>{
+  calls++;
+  // Cloudflare workerd rejects redirect:error before sending a network request.
+  if(options.redirect==='error')throw new TypeError('Unsupported redirect mode');
+  assert.equal(options.redirect,'manual');
+  assert.equal(new URL(url).hostname,'event.api.tickster.com');
+  return new Response(null,{status:302,headers:{Location:'https://other.example/collect'}});
+ };
+ const result=await ticksterCalendar(new Request('https://example.test/tickster-events'),{waitUntil(){}},{},{TICKSTER_API_KEY:'test-secret'},{cache:null,send});
+ assert.equal(calls,1);assert.equal(result.status,503);assert.deepEqual(await result.json(),{error:'ticksterUnavailable'});
+ const success=await ticksterCalendar(new Request('https://example.test/tickster-events'),{waitUntil(){}},{},{TICKSTER_API_KEY:'test-secret'},{clock:()=>now,cache:null,send:async(url,options)=>{
+  if(options.redirect==='error')throw new TypeError('Unsupported redirect mode');
+  assert.equal(options.redirect,'manual');return new Response(JSON.stringify({totalItems:1,items:[row]}));
+ }});
+ assert.equal(success.status,200);assert.equal((await success.json()).length,1);
+});

@@ -30,14 +30,14 @@ export async function ticksterCalendar(request,ctx,headers,env,options={}){
 async function ticksterCalendarData(request,ctx,headers,env,{send=fetch,cache=globalThis.caches?.default,clock=Date.now}={}){
   const apiKey=typeof env.TICKSTER_API_KEY==='string'?env.TICKSTER_API_KEY.trim():'';
   if(!apiKey)throw new TicksterError('ticksterNotConfigured');
-  const key=new URL('/tickster-events?format=3',request.url).href;
+  const key=new URL('/tickster-events?format=4',request.url).href;
   const respond=items=>new Response(JSON.stringify(items),{headers:{...headers,'Cache-Control':'no-store'}});
   const cached=await cache?.match(key);
   if(cached){try{const data=await cached.json();if(Array.isArray(data))return respond(active(data,clock()));if(data.error&&['ticksterCredentials','ticksterRateLimited','ticksterUnavailable','ticksterTimeout','ticksterInvalidResponse'].includes(data.error))throw new TicksterError(data.error);}catch(error){if(error instanceof TicksterError)throw error;}}
   async function page(skip){
     const url=new URL(endpoint);url.search=new URLSearchParams({query:'city:Göteborg',take:'100',skip:String(skip)});
     let response;
-    try{response=await send(url,{headers:{Accept:'application/json','X-API-KEY':apiKey},redirect:'error',signal:AbortSignal.timeout(25000)});}
+    try{response=await send(url,{headers:{Accept:'application/json','X-API-KEY':apiKey},redirect:'manual',signal:AbortSignal.timeout(25000)});}
     catch(error){throw new TicksterError(['TimeoutError','AbortError'].includes(error.name)?'ticksterTimeout':'ticksterUnavailable');}
     if(!response.ok)throw new TicksterError([401,403].includes(response.status)?'ticksterCredentials':response.status===429?'ticksterRateLimited':'ticksterUnavailable');
     let data;try{data=await response.json();}catch{throw new TicksterError('ticksterInvalidResponse');}
