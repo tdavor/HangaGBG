@@ -75,7 +75,7 @@ A good first meeting can become something regular. Participants can plan their n
 
 Administrators can open a private conversation from an active user’s card in the Admin panel. No friendship or shared meetup is required. The contacted user can reply, and administrator messages are labelled. Existing contact blocks still apply; this does not grant administrators access to conversations between other users.
 
-### Tickster events (Göteborg and surroundings)
+### Tickster events (Göteborg only)
 
 The Worker optionally fetches upcoming events from Tickster Event API v1.0. Add
 `TICKSTER_API_KEY` as an encrypted secret on the **hanga-gbg** Worker. Never put
@@ -89,10 +89,10 @@ npx wrangler deploy
 
 Paste the key only into Wrangler's interactive prompt. The public endpoint
 `/tickster-events` returns normalized event data without credentials. It caches
-results for one hour, fetches at most 19 pages per refresh, and filters cancelled,
+results for one hour, fetches at most 8 pages per refresh, and filters cancelled,
 past, non-regional events, gift cards and entries longer than seven days.
-Coverage: Göteborg, Mölndal, Partille, Härryda, Lerum, Kungälv, Ale, Öckerö,
-Kungsbacka, Alingsås, Stenungsund and Tjörn. Pagination is bounded to 800 entries
-for Göteborg and 100 for each surrounding city. Ticket purchases stay on
+Coverage: Göteborg only. The API query is restricted to `city:Göteborg` and
+venue city is checked again before returning results. Nearby towns are excluded.
+Pagination is bounded to 800 entries for Göteborg. Ticket purchases stay on
 Tickster; users create a separate HängaGBG meetup to coordinate attendance.
 If no key is configured, the city calendar continues working on its own.

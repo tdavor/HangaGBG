@@ -1,5 +1,5 @@
 const endpoint='https://event.api.tickster.com/api/v1.0/sv/events';
-export const ticksterCities=['Göteborg','Mölndal','Partille','Härryda','Lerum','Kungälv','Ale','Öckerö','Kungsbacka','Alingsås','Stenungsund','Tjörn'];
+export const ticksterCities=['Göteborg'];
 const normalized=s=>String(s||'').normalize('NFD').replace(/\p{M}/gu,'').trim().toLowerCase();
 const cities=new Set(ticksterCities.map(normalized));
 const label=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
@@ -22,13 +22,13 @@ export function ticksterEvents(rows,now=Date.now()) {
 const active=(rows,now)=>rows.filter(row=>row&&/^tickster-[a-z0-9]{10,32}$/i.test(row.id)&&Date.parse(row.start)>=now&&Date.parse(row.end)>=now);
 export async function ticksterCalendar(request,ctx,headers,env,{send=fetch,cache=globalThis.caches?.default,clock=Date.now}={}){
   if(!env.TICKSTER_API_KEY)return new Response('[]',{headers:{...headers,'Cache-Control':'no-store'}});
-  const key=new URL('/tickster-events?format=1',request.url).href;
+  const key=new URL('/tickster-events?format=2',request.url).href;
   const respond=items=>new Response(JSON.stringify(items),{headers:{...headers,'Cache-Control':'no-store'}});
   const cached=await cache?.match(key);
   if(cached){try{const rows=await cached.json();if(Array.isArray(rows))return respond(active(rows,clock()));}catch{}}
   const batches=await Promise.allSettled(ticksterCities.map(async city=>{
     const rows=[];
-    // Bounded pagination: at most 19 requests per refresh, cached for an hour.
+    // Bounded pagination: at most 8 requests per refresh, cached for an hour.
     for(let page=0;page<(city==='Göteborg'?8:1);page++){
       const url=new URL(endpoint);url.search=new URLSearchParams({query:'city:'+city,take:'100',skip:String(page*100)});
       const response=await send(url,{headers:{Accept:'application/json','X-API-KEY':env.TICKSTER_API_KEY},redirect:'error',signal:AbortSignal.timeout(8000)});
