@@ -3,6 +3,14 @@
 
 [**Ladda ner / Download Hänga Gbg för Android (.apk)**](https://github.com/tdavor/HangaGBG/releases/latest/download/HangaGBG.apk)
 
+# License Notice
+
+This repository is protected by copyright.
+
+All Rights Reserved.
+
+No permission is granted to use, copy, modify, distribute, or create derivative works from this source code without prior written authorization from the copyright holder.
+
 
 Svenska
 
@@ -72,27 +80,3 @@ A good first meeting can become something regular. Participants can plan their n
 | Friends / Vänner | Open Messages and choose Friends. Send requests from a past participant’s profile or an existing conversation partner’s profile. Accept or decline requests, start a direct chat and invite a friend to an upcoming meetup you organize or have joined. Friendships survive deletion of the original meetup. Removing a friend keeps previous messages; blocking stops contact. |
 | Walks with a small goal | Expand the walk ideas section in Create meetup: viewpoint, photography, a new café or neighbourhood discoveries. Templates pre-fill editable titles, instructions and a goal. The organizer chooses the actual meeting place and route. |
 
-
-Administrators can open a private conversation from an active user’s card in the Admin panel. No friendship or shared meetup is required. The contacted user can reply, and administrator messages are labelled. Existing contact blocks still apply; this does not grant administrators access to conversations between other users.
-
-### Tickster events (Göteborg only)
-
-The Worker optionally fetches upcoming events from Tickster Event API v1.0. Add
-`TICKSTER_API_KEY` as an encrypted secret on the **hanga-gbg** Worker. Never put
-this key in the Android app, `wrangler.toml`, GitHub source or build variables.
-From an authenticated terminal in the repository:
-
-```bash
-npx wrangler secret put TICKSTER_API_KEY
-npx wrangler deploy
-```
-
-Paste the key only into Wrangler's interactive prompt. The public endpoint
-`/tickster-events` returns normalized event data without credentials. It caches
-results for one hour, fetches at most 8 pages per refresh, and filters cancelled,
-past, non-regional events, gift cards and entries longer than seven days.
-Coverage: Göteborg only. The API query is restricted to `city:Göteborg` and
-venue city is checked again before returning results. Nearby towns are excluded.
-Pagination is bounded to 800 entries for Göteborg. Ticket purchases stay on
-Tickster; users create a separate HängaGBG meetup to coordinate attendance.
-If no key is configured, the city calendar continues working on its own.
