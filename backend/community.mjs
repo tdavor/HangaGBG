@@ -37,16 +37,40 @@ async function allowedMember(db,me,id) {
   if(!person||person.deleted||person.blocked||await db.get("blocks",key(me.id,id))||await db.get("blocks",key(id,me.id))) fail("missing");
   return person;
 }
+export const availabilityVersion=row=>String(row.revision||JSON.stringify([row.from,row.until,row.activity,row.area]));
 export async function communityAction(db,name,p,me,{text,integer,nextIds,notices,writeMessage}) {
   const uid=me.id;
   if(name==="availability_list") {
     const rows=await db.query("availability",[["until","GREATER_THAN",new Date().toISOString()]]);
     const people=await db.getMany("profiles",rows.map(row=>row.user_id));
     const blocks=await db.query("blocks");
+    const accepted=await db.query("availability_acceptances",[["users","ARRAY_CONTAINS",uid]]);
+    for(const [id,person] of await db.getMany("profiles",accepted.map(a=>a.participant)))people.set(id,person);
     return rows.filter(row=>{
       const person=people.get(String(row.user_id));
       return person&&!person.deleted&&!person.blocked&&!blocks.some(b=>(b.blocker===uid&&b.blocked===row.user_id)||(b.blocker===row.user_id&&b.blocked===uid));
-    }).map(row=>({...row,name:people.get(String(row.user_id)).name})).sort((a,b)=>a.from.localeCompare(b.from));
+    }).map(row=>({...row,name:people.get(String(row.user_id)).name,version:availabilityVersion(row),
+      joined:accepted.some(a=>a.owner===row.user_id&&a.participant===uid&&a.version===availabilityVersion(row)),
+      participants:row.user_id===uid?accepted.filter(a=>a.owner===uid&&a.version===availabilityVersion(row)).flatMap(a=>{
+        const person=people.get(String(a.participant));
+        return person&&!person.blocked&&!person.deleted&&!blocks.some(b=>(b.blocker===uid&&b.blocked===person.id)||(b.blocker===person.id&&b.blocked===uid))?[{id:person.id,name:person.name}]:[];
+      }):[]})).sort((a,b)=>a.from.localeCompare(b.from));
+  }
+  if(name==="availability_accept") {
+    const peer=integer(p.peer);await allowedMember(db,me,peer);
+    if(peer===uid)fail("invalid");
+    const available=await db.get("availability",peer);
+    if(!available||Date.parse(available.until)<=Date.now()||local(Date.parse(available.from)).slice(0,10)!==local(Date.now()).slice(0,10))fail("missing");
+    const version=availabilityVersion(available);
+    if(p.version!==version)fail("availabilityChanged");
+    const id=key(peer,uid),old=await db.get("availability_acceptances",id);
+    if(old?.version===version)return {};
+    db.put("availability_acceptances",id,{id,owner:peer,participant:uid,users:[peer,uid],version,created:new Date().toISOString()});
+    const labels=p.lang==="en"?{fika:"Coffee",walk:"A walk",other:"Meetup"}:{fika:"Fika",walk:"En promenad",other:"Träff"};
+    const body=(p.lang==="en"?"I joined your meetup":"Jag har gått med i din träff")+": "+labels[available.activity]+" · "+available.area+"\n"+
+      new Date(available.from).toLocaleString(p.lang==="en"?"en-GB":"sv-SE",{timeZone:"Europe/Stockholm"})+"–"+
+      new Date(available.until).toLocaleTimeString(p.lang==="en"?"en-GB":"sv-SE",{timeZone:"Europe/Stockholm",hour:"2-digit",minute:"2-digit"});
+    return writeMessage(db,me,peer,0,"Hänga Gbg",body,{availability_accept:true});
   }
   if(name==="availability_offer") {
     const peer=integer(p.peer),person=await allowedMember(db,me,peer);
@@ -69,7 +93,7 @@ export async function communityAction(db,name,p,me,{text,integer,nextIds,notices
     const midnight=localInstant(tomorrow+"T00:00:00");
     if(!Number.isFinite(from)||!Number.isFinite(to)||to<=Date.now()||to<=from||local(from).slice(0,10)!==local(Date.now()).slice(0,10)||from>=midnight||to>midnight) fail("invalid");
     if(!["fika","walk","other"].includes(p.activity)) fail("invalid");
-    db.put("availability",uid,{user_id:uid,area:text(p.area,100,1),activity:p.activity,from:new Date(from).toISOString(),until:new Date(to).toISOString()});
+    db.put("availability",uid,{revision:await nextIds(db),user_id:uid,area:text(p.area,100,1),activity:p.activity,from:new Date(from).toISOString(),until:new Date(to).toISOString()});
     return {};
   }
   if(name==="follow_list") {

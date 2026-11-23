@@ -356,6 +356,7 @@ export async function action(db, name, p, identity, env) {
         db.query("again_choices",[eq("user_id",target.id)]),db.query("again_choices",[eq("target",target.id)]),
         db.query("again_matches",[["users","ARRAY_CONTAINS",target.id]]),db.query("again_pairs",[["users","ARRAY_CONTAINS",target.id]]),db.query("friendships",[["users","ARRAY_CONTAINS",target.id]])
       ]);
+      for(const row of await db.query("availability_acceptances",[["users","ARRAY_CONTAINS",target.id]]))db.remove("availability_acceptances",row.id);
       db.remove("availability",target.id);
       db.remove("profile_photos",target.id);
       for(const row of [...additional[0],...additional[1]]) db.remove("follows",planKey(row.follower,row.organizer));

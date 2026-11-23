@@ -12,6 +12,7 @@ const copy = {
   googleDeleteHelp:["Bekräfta med ditt Google-konto i nästa steg för att radera kontot och dina uppgifter.","Confirm with your Google account in the next step to delete your account and data."],
 
   company:["Tillgängliga idag","Available today"], offer:["Föreslå en träff","Suggest a meetup"],
+  acceptMeetup:["Gå med","Join"], meetupJoined:["Du har gått med","Joined"], joinedPeople:["Har gått med","Joined members"], availabilityChanged:["Träffen har ändrats. Uppdatera och försök igen.","This meetup has changed. Refresh and try again."],
   suggestMeetup:["Föreslå en träff","Suggest a meetup"], allAvailable:["Alla tillgängliga idag","Everyone available today"], offerHelp:["Skicka ett privat förslag inom personens angivna tid. Mottagaren kan svara i chatten. Ingen vänskap eller anmälan skapas automatiskt.","Send a private suggestion within the person's available time. They can reply in chat. No friendship or event registration is created automatically."], offerPending:["Du har redan skickat ett förslag för den här tillgängligheten.","You have already sent a suggestion for this availability."], offerPendingHelp:["Ditt förslag är skickat. Du kan fortsätta skriva när mottagaren har svarat.","Your suggestion has been sent. You can continue messaging once the recipient replies."], availabilityChatHelp:["Ni kan svara privat på förslaget här.","You can discuss the suggestion privately here."], availabilityEnded:["Tillgängligheten har upphört eller tiden räcker inte längre för ett nytt förslag.","This availability has ended or there is no longer enough time for a new suggestion."], takePhoto:["Ta en bild","Take a photo"],
 
   nextCompany:["Nästa 3","Next 3"], availableTodayBadge:["Tillgänglig idag","Available today"], companyBatch:["Visar","Showing"],
@@ -75,7 +76,7 @@ const copy = {
   todayCompany:["Sällskap idag","Company today"], availableToday:["Jag vill ses idag","I'm available today"], viewAvailability:["Visa alla tillgängliga","View everyone available"],
   availabilityTime:["Tillgänglig från","Available from"], availableUntil:["Till","Until"],
   removeAvailability:["Ta bort min tillgänglighet","Remove my availability"],
-  availabilityHelp:["Syns för inloggade medlemmar och försvinner senast vid midnatt. Starta en träff och dela den med den du vill möta.","Visible to signed-in members until midnight at the latest. Create a meetup and share it with the person you want to meet."],
+  availabilityHelp:["Syns för inloggade medlemmar och försvinner senast vid midnatt. Andra kan gå med i din aktivitet och skriva till dig.","Visible to signed-in members until midnight at the latest. Others can join your activity and message you."],
   todayEmpty:["Ingen har angett tillgänglighet än.","No one has posted availability yet."],
   activity:["Aktivitet","Activity"], groupChat:["Gruppchatt","Group chat"], groupHelp:["Bara arrangören och anmälda deltagare kan läsa och skriva här.","Only the organizer and joined participants can read and write here."],
   meetingPoint:["Mötesplats","Meeting point"], meetingNote:["Så hittar vi varandra","How to recognize each other"],
@@ -818,13 +819,20 @@ function nextCompany() {
   updateAvailabilityViews();
   $("today-company")?.querySelector("[data-next-company]")?.focus();
 }
+function companyJoin(entry) {
+  return entry.joined?`<span class="joined-label">✓ ${t("meetupJoined")}</span>${link("message",`#messages/${Number(entry.user_id)}`)}`:
+    action(t("acceptMeetup"),`data-accept-company="${Number(entry.user_id)}"`,"primary company-offer");
+}
+function companyParticipants(entry) {
+  return entry?.participants?.length?`<h3>${t("joinedPeople")}</h3><ul class="company-participants">${entry.participants.map(person=>`<li>${memberLink(person.id,person.name)} ${link("message",`#messages/${Number(person.id)}`)}</li>`).join("")}</ul>`:"";
+}
 function todayCompany(all=false) {
   const own=ownAvailability(),current=companyCandidates(),selected=all?current:companySelection(current);
   return `${all?"":`<div class="rows between"><h2>${t("todayCompany")}</h2>${!own?link("availableToday","#availability"):""}</div>`}
     ${own&&!all?`<section class="my-availability"><strong>${t("myAvailability")}</strong><p>${memberLink(user.id,user.name)}</p><p>${availabilitySummary(own)}</p>
-      <div class="actions">${link("editAvailability","#availability")}${action(t("removeAvailability"),"data-remove-availability","danger")}</div></section>`:""}
+      <div class="actions">${link("editAvailability","#availability")}${action(t("removeAvailability"),"data-remove-availability","danger")}</div>${companyParticipants(own)}</section>`:""}
     ${current.length?`<ul class="availability-list company-grid ${all?"company-all":""}" aria-live="polite">${selected.map(entry=>`<li>
-      <a data-company-photo="${Number(entry.user_id)}" href="#member/${Number(entry.user_id)}" aria-label="${esc(entry.name)}">${avatar(entry.name,companyPhotoCache.get(Number(entry.user_id))?.photo)}</a><div>${memberLink(entry.user_id,entry.name)}<p>${availabilitySummary(entry)}</p><a class="action company-offer" href="#offer/${Number(entry.user_id)}">${t("suggestMeetup")}</a></div>
+      <a data-company-photo="${Number(entry.user_id)}" href="#member/${Number(entry.user_id)}" aria-label="${esc(entry.name)}">${avatar(entry.name,companyPhotoCache.get(Number(entry.user_id))?.photo)}</a><div>${memberLink(entry.user_id,entry.name)}<p>${availabilitySummary(entry)}</p>${companyJoin(entry)}</div>
       </li>`).join("")}</ul>${!all&&current.length>3?`<div class="company-pagination"><small class="muted">${t("companyBatch")} ${companyOffset+1}–${companyOffset+selected.length} / ${current.length}</small>${action(t("nextCompany"),"data-next-company")}</div>`:""}${!all?link("allAvailable","#company"):""}`:!own?`<p class="muted">${t("todayEmpty")}</p>`:""}`;
 }
 async function refreshCompanyPhotos() {
@@ -847,12 +855,7 @@ function companyPage() {
 }
 function offerPage(peer) {
   const person=availability.find(entry=>Number(entry.user_id)===peer&&availableToday(entry));
-  const start=person?Math.ceil(Math.max(Date.now()+60000,Date.parse(person.from))/60000)*60000:0;
-  if(!person||peer===user.id||start>=Date.parse(person.until))return `<h1>${t("suggestMeetup")}</h1><p>${t("availabilityEnded")}</p>${link("allAvailable","#company")}`;
-  return `<h1>${t("suggestMeetup")}</h1><p>${memberLink(peer,person.name)}</p><p>${availabilitySummary(person)}</p><p class="muted">${t("offerHelp")}</p>
-    <form data-form="availability-offer" data-peer="${peer}">${select("activity","activity",["fika","walk","food","other"].map(key=>[key,t(key)]),person.activity)}
-    ${field("start","start",localDate(new Date(start)),"datetime-local",`required min="${localDate(new Date(start))}" max="${localDate(new Date(Date.parse(person.until)-60000))}"`)}
-    ${field("place","place","","text",'required maxlength="180"')}${textArea("message","note","",'maxlength="700"')}<button class="primary">${t("send")}</button></form>`;
+  return `<h1>${t("todayCompany")}</h1>${person&&peer!==user.id?`<p>${memberLink(peer,person.name)}</p><p>${availabilitySummary(person)}</p>${companyJoin(person)}`:`<p>${t("availabilityEnded")}</p>`}`;
 }
 function availabilityPage() {
   const own=ownAvailability();
@@ -865,7 +868,7 @@ function availabilityPage() {
     <input name="day" type="hidden" value="${date}">
     <div class="actions"><button class="primary">${t("save")}</button>
       ${own?action(t("removeAvailability"),"data-remove-availability","danger"):""}</div></form>
-    <section class="card" id="availability-people">${todayCompany(true)}</section><div class="actions">${link("quick","#create/quick","primary")}</div>`;
+    ${companyParticipants(own)}<section class="card" id="availability-people">${todayCompany(true)}</section><div class="actions">${link("quick","#create/quick","primary")}</div>`;
 }
 async function saveAvailability(data) {
   const owner=user.id,revision=++availabilityRevision;
@@ -1238,7 +1241,7 @@ function memberPage(id) {
   if(!member)return `<h1>${t("memberProfile")}</h1>`;
   const organized=(member.meetups||[]).filter(e=>e.organized),participating=(member.meetups||[]).filter(e=>!e.organized);
   return `<section class="member-heading">${avatar(member.name,member.photo)}<h1>${esc(member.name)}${availabilityIndicator(id)}</h1>
-    ${user.id!==id&&availability.some(entry=>Number(entry.user_id)===id&&availableToday(entry))?link("suggestMeetup",`#offer/${id}`,"primary"):""}
+    ${user.id!==id&&availability.some(entry=>Number(entry.user_id)===id&&availableToday(entry))?companyJoin(availability.find(entry=>Number(entry.user_id)===id&&availableToday(entry))):""}
     ${user.id!==id?`<a class="action primary" href="#messages/${Number(id)}">${icon("message")}${t("message")}</a>${member.canMessage===false?`<p class="muted contact-rule">${t("contactRule")}</p>`:""}`:""}</section>
     <section class="card">${member.bio?`<h2>${t("bio")}</h2><p>${esc(member.bio)}</p>`:""}
     <h2>${t("spokenLanguages")}</h2><p>${esc(member.languages)||t("none")}</p>
@@ -1698,6 +1701,18 @@ document.addEventListener("click",async event=>{
   const button=event.target.closest("button[type=button]");
   if (!button) return;
   const d=button.dataset;
+  if("acceptCompany" in d){
+    const peer=Number(d.acceptCompany),entry=availability.find(row=>Number(row.user_id)===peer);
+    if(!entry)return;
+    const owner=user.id;button.disabled=true;
+    try{
+      await api("/availability/accept",{peer,version:entry.version,lang});
+      if(user?.id!==owner)return;
+      await refreshAvailability();location.hash="messages/"+peer;await load();
+    }catch(error){if(user?.id===owner){await refreshAvailability();status(error.message,true);}}
+    finally{button.disabled=false;}
+    return;
+  }
   if("nextCompany" in d){nextCompany();return;}
   if("removePhoto" in d){await saveProfilePhoto(null,true);return;}
   if (d.friendTab) {
