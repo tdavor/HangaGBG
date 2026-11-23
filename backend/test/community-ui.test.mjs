@@ -383,3 +383,9 @@ test('Tickster cards identify their source, keep safe links and support meetup c
  assert.match(run('cityPage(tickster)'),/#create\/city\/tickster-g1gpyukje60tybu/);
  assert.doesNotMatch(run('cityCard(tickster)'),/Göteborgs Stad/);
 });
+
+test('Tickster feed failures show an unavailable message instead of no events',()=>{
+ const run=ui();run(`filters={...defaultFilters,eventSource:'tickster'};cityItems=[];ticksterUnavailable=true`);
+ assert.match(run('results()'),/Tickster kan inte hämtas/);
+ run(`lang='en'`);assert.match(run('results()'),/Tickster could not be loaded/);
+});
