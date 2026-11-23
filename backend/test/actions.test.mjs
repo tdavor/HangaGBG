@@ -686,3 +686,47 @@ test('Google account deletion needs a recent verified provider session',async()=
   const result=await call('delete_account');
   assert.equal(result.deleteAuth,users[0].uid);
 });
+
+
+test('joining company today notifies once, lists private acceptors and enables both sides to chat after expiry',async()=>{
+  const {call,db,people}=await app();
+  const owner=people[1].id,guest=people[2].id;
+  const row={user_id:owner,from:new Date(Date.now()-60000).toISOString(),until:new Date(Date.now()+600000).toISOString(),area:'Tuve',activity:'walk'};
+  db.put('availability',owner,row);
+  const entry=(await call('availability_list',{},2))[0];
+  const result=await call('availability_accept',{peer:owner,version:entry.version,lang:'en'},2);
+  assert.equal(result.pushChat.owner,owner);assert.equal(result.pushChat.peer,guest);
+  const messages=await db.query('messages');assert.equal(messages.length,1);
+  assert.match(messages[0].body,/joined your meetup.*A walk · Tuve/);
+  assert.equal(messages[0].availability_accept,true);
+  assert.deepEqual(await call('availability_accept',{peer:owner,version:entry.version},2),{});
+  assert.equal((await db.query('messages')).length,1);
+  const own=(await call('availability_list',{},1))[0];
+  assert.deepEqual(own.participants,[{id:guest,name:'waiting'}]);
+  const guestView=(await call('availability_list',{},2))[0];assert.equal(guestView.joined,true);assert.deepEqual(guestView.participants,[]);
+  assert.doesNotMatch(JSON.stringify(own),/@|email/);
+  assert.equal((await call('chat_peer',{peer:owner},2)).canSend,true);
+  assert.equal((await call('chat_peer',{peer:guest},1)).canSend,true);
+  await call('chat_send',{peer:owner,body:'See you!'},2);
+  await call('chat_send',{peer:guest,body:'Welcome!'},1);
+  db.remove('availability',owner);
+  await call('chat_send',{peer:guest,body:'Keep in touch'},1);
+});
+
+test('company acceptance rejects stale, expired, self, blocked and forged membership',async()=>{
+  const {call,db,people}=await app();const owner=people[1].id,guest=people[2].id;
+  const row={user_id:owner,from:new Date(Date.now()-60000).toISOString(),until:new Date(Date.now()+600000).toISOString(),area:'Tuve',activity:'fika'};
+  db.put('availability',owner,row);
+  const {version}=(await call('availability_list',{},2))[0];
+  await assert.rejects(call('availability_accept',{peer:owner,version:'old'},2),{message:'availabilityChanged'});
+  await assert.rejects(call('availability_accept',{peer:owner,version},1),{message:'invalid'});
+  await assert.rejects(call('chat_send',{peer:owner,body:'Fake',availability_accept:true},2),{message:'forbidden'});
+  db.put('availability',owner,{...row,until:new Date(Date.now()-1).toISOString()});
+  await assert.rejects(call('availability_accept',{peer:owner,version},2),{message:'missing'});
+  db.put('availability',owner,row);
+  await call('availability_accept',{peer:owner,version},2);
+  await call('block_person',{id:guest,enabled:true},1);
+  await assert.rejects(call('availability_accept',{peer:owner,version},2),{message:'missing'});
+  await assert.rejects(call('chat_send',{peer:owner,body:'Blocked'},2));
+  assert.deepEqual((await call('availability_list',{},1))[0].participants,[]);
+});

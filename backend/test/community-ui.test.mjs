@@ -321,7 +321,7 @@ test('an older availability response cannot restore a removed or previous-accoun
   await next;assert.equal(run('availability.length'),0);
 });
 
-test('company cards link photos to profiles and offer a meeting, with a full list and separate camera chooser',()=>{
+test('company cards link photos to profiles and join a meeting, with a full list and separate camera chooser',()=>{
   const run=ui();
   run(`availability=[{user_id:2,name:'Anna',area:'Tuve',activity:'walk',from:new Date(Date.now()-60000).toISOString(),until:new Date(Date.now()+3600000).toISOString()}];companyPhotoCache.set(2,{photo:'data:image/jpeg;base64,/9j/2Q==',checked:Date.now()});memberProfile={id:2,name:'Anna',meetups:[]}`);
   for(const language of ['sv','en']) {
@@ -329,11 +329,11 @@ test('company cards link photos to profiles and offer a meeting, with a full lis
     const cards=run('todayCompany()');
     assert.match(cards,/data-company-photo="2" href="#member\/2"/);
     assert.match(cards,/<img class="avatar avatar-photo"/);
-    assert.match(cards,/#offer\/2/);assert.match(cards,/#company/);
-    assert.match(run('companyPage()'),/#offer\/2/);
-    assert.match(run('memberPage(2)'),/#offer\/2/);
-    assert.match(run('offerPage(2)'),/data-form="availability-offer" data-peer="2"/);
-    assert.match(run('offerPage(2)'),/name="place"/);
+    assert.match(cards,/data-accept-company="2"/);assert.match(cards,/#company/);
+    assert.match(run('companyPage()'),/data-accept-company="2"/);
+    assert.match(run('memberPage(2)'),/data-accept-company="2"/);
+    assert.match(run('offerPage(2)'),/data-accept-company="2"/);
+    assert.doesNotMatch(run('offerPage(2)'),/name="place"|availability-offer/);
     assert.match(run('photoEditor()'),/id="profile-camera-input"[^>]*capture="user"/);
   }
   run('availability=[]');assert.doesNotMatch(run('offerPage(2)'),/data-form="availability-offer"/);
@@ -361,4 +361,15 @@ test('Google sign-in keeps first-profile consent and Google account deletion acc
   const profile=run('profilePage()');
   assert.match(profile,/Google/);assert.match(profile,/data-form="deleteAccount"/);
   assert.doesNotMatch(profile,/type="password"/);assert.match(profile,/required readonly/);
+});
+
+test('joined company cards open chat and the organizer sees acceptors without email',()=>{
+  const run=ui();
+  run(`availability=[{user_id:2,name:'Anna',area:'Tuve',activity:'walk',joined:true,from:new Date().toISOString(),until:new Date(Date.now()+600000).toISOString()}]`);
+  assert.match(run('todayCompany()'),/#messages\/2/);
+  assert.doesNotMatch(run('todayCompany()'),/data-accept-company/);
+  run(`availability=[{user_id:1,name:'Davor',area:'Tuve',activity:'walk',participants:[{id:2,name:'Anna'}],from:new Date().toISOString(),until:new Date(Date.now()+600000).toISOString()}]`);
+  assert.match(run('todayCompany()'),/#messages\/2/);
+  assert.match(run('availabilityPage()'),/company-participants/);
+  assert.doesNotMatch(run('todayCompany()'),/@/);
 });
