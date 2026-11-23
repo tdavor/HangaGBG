@@ -373,3 +373,13 @@ test('joined company cards open chat and the organizer sees acceptors without em
   assert.match(run('availabilityPage()'),/company-participants/);
   assert.doesNotMatch(run('todayCompany()'),/@/);
 });
+
+test('Tickster cards identify their source, keep safe links and support meetup creation',()=>{
+ const run=ui();
+ run(`globalThis.tickster={id:'tickster-g1gpyukje60tybu',provider:'tickster',title:'Konsert',place:'Pustervik',organizer:'Arrangör',source:'https://www.tickster.com/sv/events/g1gpyukje60tybu',start:new Date(Date.now()+3600000).toISOString(),end:new Date(Date.now()+7200000).toISOString(),city:true,area:'Göteborg',category:'other'}`);
+ assert.equal(run('validCityEvent(tickster)'),true);
+ assert.equal(run('validCityEvent({...tickster,source:"https://evil.example"})'),false);
+ assert.match(run('cityCard(tickster)'),/Tickster/);
+ assert.match(run('cityPage(tickster)'),/#create\/city\/tickster-g1gpyukje60tybu/);
+ assert.doesNotMatch(run('cityCard(tickster)'),/Göteborgs Stad/);
+});
