@@ -280,18 +280,20 @@ function scheduleCityExpiry() {
 }
 function loadCityCalendar(force=false) {
   pruneCityEvents();
+  cityItems=cityItems.filter(item=>item.provider==="tickster");
+  if(filters.eventSource==="city")filters.eventSource="";
   scheduleCityExpiry();
   if (demo || !base || (!force && Date.now()-cityLoadedAt<((cityUnavailable||ticksterUnavailable)?60000:300000))) return;
   if (cityRequest) return cityRequest;
   const origin=base;
   cityRequest=(async()=>{
     try {
-      const feeds=await Promise.allSettled(["/city-events","/tickster-events"].map(async path=>{
+      const feeds=await Promise.allSettled(["/tickster-events"].map(async path=>{
         const response=await fetch(origin+path,{cache:"no-store",redirect:"error",credentials:"omit",signal:AbortSignal.timeout(60000)});
         if(!response.ok)throw new Error("cityCalendarUnavailable");
         const rows=await response.json();if(!Array.isArray(rows))throw new Error("cityCalendarUnavailable");return rows;
       }));
-      if(origin===base){cityUnavailable=feeds[0].status==="rejected";ticksterUnavailable=feeds[1].status==="rejected";}
+      if(origin===base){cityUnavailable=false;ticksterUnavailable=feeds[0].status==="rejected";}
       if(feeds.every(feed=>feed.status==="rejected"))throw new Error("cityCalendarUnavailable");
       const items=feeds.filter(feed=>feed.status==="fulfilled").flatMap(feed=>feed.value);
       if (origin===base) {
@@ -957,7 +959,7 @@ function discoverPage() {
       ${select("area","area",[["",t("anyArea")],...areas.map(x=>[x,x]),["other",t("other")]],filters.area)}
       ${select("category","category",[["",t("all")],...cats.map(x=>[x,t(x)])],filters.category)}
       ${select("atmosphereFilter","mood",[["",t("all")],...moods.filter(Boolean).map(x=>[x,t(x)])],filters.mood)}
-      ${demo?"":select("eventSource","eventSource",[["",t("all")],["community",t("communityEvents")],["city",t("cityCalendar")],["tickster",t("tickster")]],filters.eventSource)}
+      ${demo?"":select("eventSource","eventSource",[["",t("all")],["community",t("communityEvents")],["tickster",t("tickster")]],filters.eventSource)}
       ${select("events","period",["upcoming","today","tonight"].map(x=>[x,t(x)]),filters.period)}
       <label class="check wide"><input type="checkbox" name="newcomers" ${filters.newcomers?"checked":""}> ${t("newcomers")}</label>
     </div></details></form>
@@ -987,6 +989,7 @@ function results() {
   const term=filters.query.trim().toLowerCase();
   const today=localDate(new Date()).slice(0,10);
   const matching=[...events,...cityItems].filter(event=>{
+    if(event.city&&event.provider!=="tickster")return false;
     if (filters.eventSource && filters.eventSource!==(event.provider==="tickster"?"tickster":event.city?"city":"community")) return false;
     const date=localDate(new Date(event.start));
     if (event.hidden || event.cancelled || (filters.newcomers && !event.newcomers) || isPast(event) || !hasArea(event,filters.area)) return false;
