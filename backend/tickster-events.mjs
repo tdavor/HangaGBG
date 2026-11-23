@@ -20,28 +20,39 @@ export function ticksterEvents(rows,now=Date.now()) {
   return [...result.values()].sort((a,b)=>a.start.localeCompare(b.start)||a.id.localeCompare(b.id));
 }
 const active=(rows,now)=>rows.filter(row=>row&&/^tickster-[a-z0-9]{10,32}$/i.test(row.id)&&Date.parse(row.start)>=now&&Date.parse(row.end)>=now);
-export async function ticksterCalendar(request,ctx,headers,env,{send=fetch,cache=globalThis.caches?.default,clock=Date.now}={}){
-  if(!env.TICKSTER_API_KEY)return new Response('[]',{headers:{...headers,'Cache-Control':'no-store'}});
-  const key=new URL('/tickster-events?format=2',request.url).href;
+export class TicksterError extends Error {
+  constructor(code){super(code);this.code=code;}
+}
+export async function ticksterCalendar(request,ctx,headers,env,options={}){
+  try{return await ticksterCalendarData(request,ctx,headers,env,options);}
+  catch(error){if(!(error instanceof TicksterError))throw error;return new Response(JSON.stringify({error:error.code}),{status:503,headers:{...headers,'Cache-Control':'no-store'}});}
+}
+async function ticksterCalendarData(request,ctx,headers,env,{send=fetch,cache=globalThis.caches?.default,clock=Date.now}={}){
+  const apiKey=typeof env.TICKSTER_API_KEY==='string'?env.TICKSTER_API_KEY.trim():'';
+  if(!apiKey)throw new TicksterError('ticksterNotConfigured');
+  const key=new URL('/tickster-events?format=3',request.url).href;
   const respond=items=>new Response(JSON.stringify(items),{headers:{...headers,'Cache-Control':'no-store'}});
   const cached=await cache?.match(key);
-  if(cached){try{const rows=await cached.json();if(Array.isArray(rows))return respond(active(rows,clock()));}catch{}}
-  const batches=await Promise.allSettled(ticksterCities.map(async city=>{
-    const rows=[];
-    // Bounded pagination: at most 8 requests per refresh, cached for an hour.
-    for(let page=0;page<(city==='Göteborg'?8:1);page++){
-      const url=new URL(endpoint);url.search=new URLSearchParams({query:'city:'+city,take:'100',skip:String(page*100)});
-      const response=await send(url,{headers:{Accept:'application/json','X-API-KEY':env.TICKSTER_API_KEY},redirect:'error',signal:AbortSignal.timeout(8000)});
-      if(!response.ok)throw new Error('Tickster unavailable');
-      const data=await response.json();if(!Array.isArray(data.items))throw new Error('Invalid Tickster response');
-      rows.push(...data.items);
-      if(data.items.length<100||(page+1)*100>=data.totalItems||Number(response.headers.get('X-RATELIMIT-REMAINING')||100)<=5)break;
-    }
-    return rows;
-  }));
-  const successful=batches.filter(b=>b.status==='fulfilled');
-  if(!successful.length)throw new Error('Tickster unavailable');
-  const items=ticksterEvents(successful.flatMap(b=>b.value),clock());
-  if(cache)ctx.waitUntil(cache.put(key,new Response(JSON.stringify(items),{headers:{...headers,'Cache-Control':'public, max-age=3600'}})));
+  if(cached){try{const data=await cached.json();if(Array.isArray(data))return respond(active(data,clock()));if(data.error&&['ticksterCredentials','ticksterRateLimited','ticksterUnavailable','ticksterTimeout','ticksterInvalidResponse'].includes(data.error))throw new TicksterError(data.error);}catch(error){if(error instanceof TicksterError)throw error;}}
+  async function page(skip){
+    const url=new URL(endpoint);url.search=new URLSearchParams({query:'city:Göteborg',take:'100',skip:String(skip)});
+    let response;
+    try{response=await send(url,{headers:{Accept:'application/json','X-API-KEY':apiKey},redirect:'error',signal:AbortSignal.timeout(25000)});}
+    catch(error){throw new TicksterError(['TimeoutError','AbortError'].includes(error.name)?'ticksterTimeout':'ticksterUnavailable');}
+    if(!response.ok)throw new TicksterError([401,403].includes(response.status)?'ticksterCredentials':response.status===429?'ticksterRateLimited':'ticksterUnavailable');
+    let data;try{data=await response.json();}catch{throw new TicksterError('ticksterInvalidResponse');}
+    if(!Array.isArray(data.items))throw new TicksterError('ticksterInvalidResponse');
+    return {...data,remaining:Number(response.headers.get('X-RATELIMIT-REMAINING')||100)};
+  }
+  let first;
+  try{first=await page(0);}catch(error){
+    if(cache&&error instanceof TicksterError)ctx.waitUntil(cache.put(key,new Response(JSON.stringify({error:error.code}),{headers:{...headers,'Cache-Control':'public, max-age=300'}})));
+    throw error;
+  }
+  const count=first.items.length<100||first.remaining<=5?1:Math.min(8,Math.max(1,Math.ceil(Number(first.totalItems||100)/100)));
+  // Later pages run concurrently. A slow or unavailable page cannot discard the first page.
+  const later=await Promise.allSettled(Array.from({length:count-1},(_,i)=>page((i+1)*100)));
+  const items=ticksterEvents([first,...later.filter(p=>p.status==='fulfilled').map(p=>p.value)].flatMap(p=>p.items),clock());
+  if(cache)ctx.waitUntil(cache.put(key,new Response(JSON.stringify(items),{headers:{...headers,'Cache-Control':'public, max-age='+(later.some(p=>p.status==='rejected')?600:3600)}})));
   return respond(items);
 }

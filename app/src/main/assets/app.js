@@ -98,6 +98,7 @@ const copy = {
   groupReport:["Anmäl gruppmeddelande","Report group message"],
 
   cityOngoing:["Pågår nu","Ongoing now"],
+  ticksterUnavailable:["Tickster kan inte hämtas just nu. Försök igen senare.","Tickster could not be loaded. Please try again later."],
   tickster:["Tickster","Tickster"],
   cityCalendar:["Göteborgs Stad","City of Gothenburg"],
   cityCalendarUnavailable:["Stadens kalendarium är tillfälligt otillgängligt.","The city calendar is temporarily unavailable."],
@@ -254,7 +255,7 @@ let availability=[],followingPeople=[],groupRows=[],groupEventId=0,feedbackData=
 let friends=[],friendContext=null,chatPeer=null;
 let friendSearch="",friendTab="friends";
 let user = null, events = [], messageList = [], noticeList = [], admin = null;
-let cityItems = [], cityRequest, cityLoadedAt = 0, cityUnavailable = false, cityExpiryTimer;
+let cityItems = [], cityRequest, cityLoadedAt = 0, cityUnavailable = false, ticksterUnavailable = false, cityExpiryTimer;
 const cityId = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const cityPortal = "https://goteborg.se/wps/portal/kalendarium/kalendarium-start?activityId=";
 function validCityEvent(item) {
@@ -280,7 +281,7 @@ function scheduleCityExpiry() {
 function loadCityCalendar(force=false) {
   pruneCityEvents();
   scheduleCityExpiry();
-  if (demo || !base || (!force && Date.now()-cityLoadedAt<(cityUnavailable?60000:300000))) return;
+  if (demo || !base || (!force && Date.now()-cityLoadedAt<((cityUnavailable||ticksterUnavailable)?60000:300000))) return;
   if (cityRequest) return cityRequest;
   const origin=base;
   cityRequest=(async()=>{
@@ -290,17 +291,17 @@ function loadCityCalendar(force=false) {
         if(!response.ok)throw new Error("cityCalendarUnavailable");
         const rows=await response.json();if(!Array.isArray(rows))throw new Error("cityCalendarUnavailable");return rows;
       }));
+      if(origin===base){cityUnavailable=feeds[0].status==="rejected";ticksterUnavailable=feeds[1].status==="rejected";}
       if(feeds.every(feed=>feed.status==="rejected"))throw new Error("cityCalendarUnavailable");
       const items=feeds.filter(feed=>feed.status==="fulfilled").flatMap(feed=>feed.value);
       if (origin===base) {
         cityItems=items.filter(validCityEvent).map(item=>({...item,city:true,area:item.area||"Göteborg",category:"other"}));
         cityLoadedAt=Date.now();
-        cityUnavailable=false;
         scheduleCityExpiry();
       }
     } catch {
       if (origin===base) {
-        cityUnavailable=true;
+        cityUnavailable=true;ticksterUnavailable=true;
         cityLoadedAt=Date.now();
       }
     }
@@ -1000,7 +1001,7 @@ function results() {
   });
   if (!matching.length) {
     eventPageIndex=0;
-    return `<p class="muted">${t(cityUnavailable&&filters.eventSource==="city"?"cityCalendarUnavailable":"none")}</p>`;
+    return `<p class="muted">${t(ticksterUnavailable&&filters.eventSource==="tickster"?"ticksterUnavailable":cityUnavailable&&filters.eventSource==="city"?"cityCalendarUnavailable":"none")}</p>`;
   }
   if (!hasFilters()) {
     for (const event of matching.filter(event=>!event.city)) {
@@ -1541,7 +1542,7 @@ document.addEventListener("submit",async event=>{
       base=hangaCloud.configuration.url;
       cityItems=[];
       cityLoadedAt=0;
-      cityUnavailable=false;
+      cityUnavailable=false;ticksterUnavailable=false;
       events=[];
       browseOrder.clear();
       eventPageIndex=0;
