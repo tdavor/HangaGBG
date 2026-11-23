@@ -309,6 +309,9 @@ public final class MainActivity extends Activity {
 
     private final class AppActions {
         @JavascriptInterface public boolean googleSignInAvailable() { return googleLogin!=null; }
+        @JavascriptInterface public void googleCancel() {
+            runOnUiThread(() -> {if(googleLogin!=null)googleLogin.cancel();});
+        }
         @JavascriptInterface public void googleSignOut() {
             runOnUiThread(() -> {if(googleLogin!=null)googleLogin.signOut();});
         }

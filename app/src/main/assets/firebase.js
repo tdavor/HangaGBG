@@ -11,6 +11,7 @@ const hangaCloud = (() => {
   let credentials = stored(authKey);
   let refreshRequest;
   let googleRequest;
+  let googleOperation;
   let revision = 0;
   localStorage.removeItem("hangaConnection");
   localStorage.removeItem("hangaAuth");
@@ -20,7 +21,9 @@ const hangaCloud = (() => {
     if(googleRequest){
       clearTimeout(googleRequest.timer);
       googleRequest.reject(new Error("googleCancelled"));googleRequest=null;
+      window.HangaAndroid?.googleCancel?.();
     }
+    googleOperation=null;
     credentials = null;
     refreshRequest = null;
     localStorage.removeItem(authKey);
@@ -106,8 +109,8 @@ const hangaCloud = (() => {
       const id=crypto.randomUUID().replaceAll("-","");
       const timer=setTimeout(()=>{
         if(googleRequest?.id!==id)return;
-        googleRequest=null;reject(new Error("googleCancelled"));
-        window.HangaAndroid.googleSignOut?.();
+        googleRequest=null;reject(new Error("googleTimeout"));
+        window.HangaAndroid.googleCancel?.();
       },120000);
       googleRequest={id,resolve,reject,timer};
       try {window.HangaAndroid.googleSignIn(id);}
@@ -146,18 +149,22 @@ const hangaCloud = (() => {
 
   async function request(path,data) {
     if(path==="/google/login") {
-      const current=revision;
-      const result=await googleSignIn();
+      if(googleOperation)throw new Error("googleBusy");
+      const operation={};googleOperation=operation;
       try {
-        const profile=await rpc("me",{},result.idToken);
-        if(revision!==current)throw new Error("loginRequired");
-        save(result,true);
-        return {token:"firebase",user:profile};
-      } catch(error) {
-        if(error.message!=="loginRequired" || revision!==current)throw error;
-        save(result,false);
-        return {onboarding:true};
-      }
+        const current=revision;
+        const result=await googleSignIn();
+        try {
+          const profile=await rpc("me",{},result.idToken);
+          if(revision!==current)throw new Error("loginRequired");
+          save(result,true);
+          return {token:"firebase",user:profile};
+        } catch(error) {
+          if(error.message!=="loginRequired" || revision!==current)throw error;
+          save(result,false);
+          return {onboarding:true};
+        }
+      } finally {if(googleOperation===operation)googleOperation=null;}
     }
     if(path==="/google/complete") {
       const current=revision;
